@@ -58,3 +58,8 @@ node_modules/
 dist/
 .cache/
 .env.*.local
+
+# Documentation files
+*.md
+!README.md
+!frontend/README.md
