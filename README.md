@@ -1,6 +1,6 @@
-# Task Management System - Spring Boot Application
+# TaskFlow – Backend & Frontend
 
-A full-featured collaborative task management system built with Spring Boot 3.2.1, MongoDB, and JWT authentication. Features team collaboration, project management, task tracking with comments and tags, and user profile management with GridFS file storage.
+A full-featured collaborative task management system with a Spring Boot 3.2.1 backend (Java 21, MongoDB, JWT) and a React + TypeScript + Vite frontend. It supports team collaboration, project and task management, real-time chat, notifications, and user profile avatars.
 
 ## 🚀 Quick Start
 
@@ -22,6 +22,25 @@ mvn test surefire-report:report
 ```
 
 Application starts on `http://localhost:8080`
+
+### Frontend (Vite)
+
+```bash
+# Navigate to frontend
+cd frontend
+
+# Install deps
+npm install
+
+# Configure API URL (required)
+# Create .env with VITE_API_URL pointing to backend
+echo "VITE_API_URL=http://localhost:8080" > .env
+
+# Start dev server
+npm run dev
+```
+
+Frontend runs on `http://localhost:5173` and calls the backend using `VITE_API_URL`.
 
 ## 📋 Table of Contents
 
@@ -143,6 +162,15 @@ Generate a secure secret key:
 # Use a random string generator or command
 openssl rand -base64 64
 ```
+
+### Frontend Env
+- Create `frontend/.env` with `VITE_API_URL=<backend-url>`
+- Example: `VITE_API_URL=http://localhost:8080`
+
+### Deployment Notes
+- Frontend and backend are deployed as separate services.
+- Use platform environment variables (no `.env` files committed).
+- Backend requires `spring.data.mongodb.uri` and `jwt.secret`.
 
 ## 📚 API Documentation
 
@@ -756,12 +784,7 @@ src/main/java/com/example/webapp/
 
 ## 📖 Additional Documentation
 
-- **PROJECT_OVERVIEW.md** - Comprehensive project overview
-- **ARCHITECTURE.md** - Technical architecture details
-- **API_REFERENCE.md** - Complete API endpoint reference
-- **TESTING_GUIDE.md** - Testing examples and scenarios
-- **QUICK_START.md** - Quick setup guide
-- **MONGODB_SETUP.md** - MongoDB configuration guide
+This repository ignores auxiliary `.md` documents in Git to keep the repo clean. Key details are consolidated here. Local docs like `PROJECT_OVERVIEW.md`, `ARCHITECTURE.md`, `API_REFERENCE.md`, `TESTING_GUIDE.md`, `QUICK_START.md`, and `MONGODB_SETUP.md` can be referenced locally if present.
 
 ## 🐛 Troubleshooting
 
