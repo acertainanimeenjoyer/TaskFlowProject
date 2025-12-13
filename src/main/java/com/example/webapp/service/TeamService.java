@@ -83,6 +83,39 @@ public class TeamService {
     }
     
     /**
+     * Invite a user to the team by email (manager only)
+     * In PostgreSQL version, we add the user immediately if they exist
+     */
+    public Team inviteEmail(Long teamId, Long managerId, String inviteEmail) {
+        log.info("Manager {} inviting {} to team {}", managerId, inviteEmail, teamId);
+        
+        // Verify team exists and user is manager
+        Team team = teamRepository.findByIdAndManagerId(teamId, managerId)
+                .orElseThrow(() -> new IllegalArgumentException("Team not found or you are not the manager"));
+        
+        // Check if invited user exists
+        User invitedUser = userRepository.findByEmail(inviteEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User with email " + inviteEmail + " not found"));
+        
+        // Check if already a member
+        if (team.getMembers().contains(invitedUser)) {
+            throw new IllegalArgumentException("User is already a member");
+        }
+        
+        // Check team size
+        if (team.getMembers().size() >= MAX_MEMBERS) {
+            throw new IllegalArgumentException("Team has reached maximum member limit of " + MAX_MEMBERS);
+        }
+        
+        // Add user to members directly
+        team.getMembers().add(invitedUser);
+        Team savedTeam = teamRepository.save(team);
+        
+        log.info("User {} added to team {} via email invitation", inviteEmail, teamId);
+        return savedTeam;
+    }
+    
+    /**
      * Join a team
      */
     @Transactional

@@ -49,7 +49,15 @@ public class ProjectService {
                 .orElseThrow(() -> new IllegalArgumentException("Owner user not found"));
         
         // Verify team exists if provided
-        Long teamId = request.getTeamId();
+        String teamIdStr = request.getTeamId();
+        Long teamId = null;
+        if (teamIdStr != null && !teamIdStr.isEmpty()) {
+            try {
+                teamId = Long.parseLong(teamIdStr);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid team ID format");
+            }
+        }
         if (teamId != null) {
             teamRepository.findById(teamId)
                     .orElseThrow(() -> new IllegalArgumentException("Team not found"));

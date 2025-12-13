@@ -355,7 +355,7 @@ public class TeamController {
                 .toList();
         
         return TeamResponse.builder()
-                .id(team.getId())
+                .id(String.valueOf(team.getId()))
                 .name(team.getName())
                 .managerEmail(managerEmail)
                 .memberIds(memberIds)
@@ -436,12 +436,12 @@ public class TeamController {
                 .toList();
         
         return ProjectResponse.builder()
-                .id(project.getId())
+                .id(String.valueOf(project.getId()))
                 .name(project.getName())
                 .description(project.getDescription())
-                .ownerId(project.getOwnerId())
+                .ownerId(String.valueOf(project.getOwnerId()))
                 .ownerEmail(ownerEmail)
-                .teamId(project.getTeamId())
+                .teamId(project.getTeamId() != null ? String.valueOf(project.getTeamId()) : null)
                 .memberIds(memberIds)
                 .memberEmails(memberEmails)
                 .createdAt(project.getCreatedAt())
