@@ -296,3 +296,4 @@ public class PermissionService {
         // Same logic as task management
         return canManageTasks(projectId, userId);
     }
+}

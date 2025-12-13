@@ -73,7 +73,7 @@ public class TeamController {
      */
     @PostMapping("/{id}/invite")
     public ResponseEntity<?> inviteEmail(
-            @PathVariable String id,
+            @PathVariable Long id,
             @Valid @RequestBody InviteEmailRequest request,
             Authentication authentication) {
         
@@ -85,13 +85,13 @@ public class TeamController {
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
             
             // Check if user is manager
-            if (!permissionService.isManager(id, user.getId(), managerEmail)) {
+            if (!permissionService.isManager(id, user.getId())) {
                 log.warn("User {} unauthorized to invite to team {}", managerEmail, id);
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body("Only the team manager can send invitations");
             }
             
-            Team team = teamService.inviteEmail(id, managerEmail, request.getEmail());
+            Team team = teamService.inviteEmail(id, user.getId(), request.getEmail());
             TeamResponse response = mapToResponse(team);
             
             return ResponseEntity.ok(response);
@@ -112,7 +112,7 @@ public class TeamController {
      */
     @PostMapping("/{id}/join")
     public ResponseEntity<?> joinTeam(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -144,7 +144,7 @@ public class TeamController {
      */
     @PostMapping("/{id}/leave")
     public ResponseEntity<?> leaveTeam(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -176,7 +176,7 @@ public class TeamController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<?> getTeam(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -243,8 +243,8 @@ public class TeamController {
      */
     @PostMapping("/{id}/promote/{userId}")
     public ResponseEntity<?> promoteMember(
-            @PathVariable String id,
-            @PathVariable String userId,
+            @PathVariable Long id,
+            @PathVariable Long userId,
             Authentication authentication) {
         
         try {
@@ -275,8 +275,8 @@ public class TeamController {
      */
     @PostMapping("/{id}/demote/{userId}")
     public ResponseEntity<?> demoteMember(
-            @PathVariable String id,
-            @PathVariable String userId,
+            @PathVariable Long id,
+            @PathVariable Long userId,
             Authentication authentication) {
         
         try {
@@ -307,8 +307,8 @@ public class TeamController {
      */
     @PostMapping("/{id}/kick/{userId}")
     public ResponseEntity<?> kickMember(
-            @PathVariable String id,
-            @PathVariable String userId,
+            @PathVariable Long id,
+            @PathVariable Long userId,
             Authentication authentication) {
         
         try {
@@ -356,7 +356,7 @@ public class TeamController {
      */
     @GetMapping("/{id}/projects")
     public ResponseEntity<?> getTeamProjects(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
