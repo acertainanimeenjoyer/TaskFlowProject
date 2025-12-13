@@ -26,7 +26,7 @@ public class TagService {
     /**
      * Create a new tag in a project (with duplicate prevention)
      */
-    public Tag createTag(String projectId, String userId, CreateTagRequest request) {
+    public Tag createTag(Long projectId, Long userId, CreateTagRequest request) {
         log.info("User {} creating tag '{}' in project {}", userId, request.getName(), projectId);
         
         // Verify user has access to the project
@@ -60,7 +60,7 @@ public class TagService {
     /**
      * Get all tags for a project
      */
-    public List<Tag> listTags(String projectId, String userId) {
+    public List<Tag> listTags(Long projectId, Long userId) {
         log.info("User {} fetching tags for project {}", userId, projectId);
         
         // Verify user has access to the project
@@ -74,7 +74,7 @@ public class TagService {
     /**
      * Get tag count for a project
      */
-    public long countTags(String projectId) {
+    public long countTags(Long projectId) {
         return tagRepository.countByProjectId(projectId);
     }
 }
