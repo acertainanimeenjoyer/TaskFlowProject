@@ -37,35 +37,35 @@ public class NotificationService {
     /**
      * Get notifications for a user with pagination
      */
-    public Page<Notification> getNotifications(String userId, int page, int size) {
+    public Page<Notification> getNotifications(Long userId, int page, int size) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
     }
 
     /**
      * Get unread notifications for a user
      */
-    public List<Notification> getUnreadNotifications(String userId) {
+    public List<Notification> getUnreadNotifications(Long userId) {
         return notificationRepository.findByUserIdAndReadFalseOrderByCreatedAtDesc(userId);
     }
 
     /**
      * Get unread notification count
      */
-    public long getUnreadCount(String userId) {
+    public long getUnreadCount(Long userId) {
         return notificationRepository.countByUserIdAndReadFalse(userId);
     }
 
     /**
      * Get recent notifications (top 10)
      */
-    public List<Notification> getRecentNotifications(String userId) {
+    public List<Notification> getRecentNotifications(Long userId) {
         return notificationRepository.findTop10ByUserIdOrderByCreatedAtDesc(userId);
     }
 
     /**
      * Mark a notification as read
      */
-    public void markAsRead(String notificationId, String userId) {
+    public void markAsRead(Long notificationId, Long userId) {
         Optional<Notification> notification = notificationRepository.findById(notificationId);
         if (notification.isPresent() && notification.get().getUserId().equals(userId)) {
             Notification n = notification.get();
@@ -77,7 +77,7 @@ public class NotificationService {
     /**
      * Mark all notifications as read for a user
      */
-    public void markAllAsRead(String userId) {
+    public void markAllAsRead(Long userId) {
         List<Notification> unread = notificationRepository.findByUserIdAndReadFalseOrderByCreatedAtDesc(userId);
         for (Notification n : unread) {
             n.setRead(true);
@@ -88,8 +88,8 @@ public class NotificationService {
     /**
      * Create a notification
      */
-    private Notification createNotification(String userId, String type, String title, String message, 
-                                            String referenceId, String referenceType) {
+    private Notification createNotification(Long userId, String type, String title, String message, 
+                                            Long referenceId, String referenceType) {
         Notification notification = Notification.builder()
                 .userId(userId)
                 .type(type)
@@ -106,17 +106,20 @@ public class NotificationService {
     /**
      * Get team leaders and owner for a team
      */
-    private Set<String> getTeamLeadersAndOwner(String teamId) {
-        Set<String> userIds = new HashSet<>();
+    private Set<Long> getTeamLeadersAndOwner(Long teamId) {
+        Set<Long> userIds = new HashSet<>();
         Optional<Team> teamOpt = teamRepository.findById(teamId);
         if (teamOpt.isPresent()) {
             Team team = teamOpt.get();
-            // Add team owner
-            Optional<User> owner = userRepository.findByEmail(team.getManagerEmail());
-            owner.ifPresent(user -> userIds.add(user.getId()));
+            // Add team owner (manager)
+            if (team.getManagerId() != null) {
+                userIds.add(team.getManagerId());
+            }
             // Add leaders
-            if (team.getLeaderIds() != null) {
-                userIds.addAll(team.getLeaderIds());
+            if (team.getLeaders() != null) {
+                for (User leader : team.getLeaders()) {
+                    userIds.add(leader.getId());
+                }
             }
         }
         return userIds;
@@ -129,17 +132,17 @@ public class NotificationService {
      * - Leaders: Always notified
      * - Members: Only if they're added as project members
      */
-    public void notifyProjectCreated(Project project, String creatorId) {
+    public void notifyProjectCreated(Project project, Long creatorId) {
         log.info("Creating notifications for project: {}", project.getName());
         
-        Set<String> notifiedUsers = new HashSet<>();
+        Set<Long> notifiedUsers = new HashSet<>();
         String title = "New Project Created";
         String message = "Project '" + project.getName() + "' has been created";
 
         // Notify team leaders if project belongs to a team
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
-            Set<String> leaders = getTeamLeadersAndOwner(project.getTeamId());
-            for (String leaderId : leaders) {
+        if (project.getTeamId() != null) {
+            Set<Long> leaders = getTeamLeadersAndOwner(project.getTeamId());
+            for (Long leaderId : leaders) {
                 if (!leaderId.equals(creatorId) && notifiedUsers.add(leaderId)) {
                     createNotification(leaderId, "PROJECT_CREATED", title, message, 
                                       project.getId(), "project");
@@ -148,8 +151,9 @@ public class NotificationService {
         }
 
         // Notify project members (excluding creator)
-        if (project.getMemberIds() != null) {
-            for (String memberId : project.getMemberIds()) {
+        if (project.getMembers() != null) {
+            for (User member : project.getMembers()) {
+                Long memberId = member.getId();
                 if (!memberId.equals(creatorId) && notifiedUsers.add(memberId)) {
                     createNotification(memberId, "PROJECT_CREATED", title, message,
                                       project.getId(), "project");
@@ -161,7 +165,7 @@ public class NotificationService {
     /**
      * Notify when a member is added to a project
      */
-    public void notifyMemberAddedToProject(Project project, String addedMemberId, String addedByUserId) {
+    public void notifyMemberAddedToProject(Project project, Long addedMemberId, Long addedByUserId) {
         log.info("Notifying member {} added to project {}", addedMemberId, project.getName());
         
         // Notify the added member
@@ -173,9 +177,9 @@ public class NotificationService {
         }
 
         // Notify leaders
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
-            Set<String> leaders = getTeamLeadersAndOwner(project.getTeamId());
-            for (String leaderId : leaders) {
+        if (project.getTeamId() != null) {
+            Set<Long> leaders = getTeamLeadersAndOwner(project.getTeamId());
+            for (Long leaderId : leaders) {
                 if (!leaderId.equals(addedByUserId) && !leaderId.equals(addedMemberId)) {
                     Optional<User> addedUser = userRepository.findById(addedMemberId);
                     String memberName = addedUser.map(User::getEmail).orElse("A user");
@@ -195,17 +199,17 @@ public class NotificationService {
      * - Leaders: Always notified
      * - Assignees: Notified if assigned
      */
-    public void notifyTaskCreated(Task task, Project project, String creatorId) {
+    public void notifyTaskCreated(Task task, Project project, Long creatorId) {
         log.info("Creating notifications for task: {}", task.getTitle());
         
-        Set<String> notifiedUsers = new HashSet<>();
+        Set<Long> notifiedUsers = new HashSet<>();
         String title = "New Task Created";
         String message = "Task '" + task.getTitle() + "' has been created in project '" + project.getName() + "'";
 
         // Notify team leaders if project belongs to a team
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
-            Set<String> leaders = getTeamLeadersAndOwner(project.getTeamId());
-            for (String leaderId : leaders) {
+        if (project.getTeamId() != null) {
+            Set<Long> leaders = getTeamLeadersAndOwner(project.getTeamId());
+            for (Long leaderId : leaders) {
                 if (!leaderId.equals(creatorId) && notifiedUsers.add(leaderId)) {
                     createNotification(leaderId, "TASK_CREATED", title, message,
                                       task.getId(), "task");
@@ -214,8 +218,9 @@ public class NotificationService {
         }
 
         // Notify assignees
-        if (task.getAssigneeIds() != null) {
-            for (String assigneeId : task.getAssigneeIds()) {
+        if (task.getAssignees() != null) {
+            for (User assignee : task.getAssignees()) {
+                Long assigneeId = assignee.getId();
                 if (!assigneeId.equals(creatorId) && notifiedUsers.add(assigneeId)) {
                     createNotification(assigneeId, "TASK_ASSIGNED",
                                       "Task Assigned to You",
@@ -231,17 +236,17 @@ public class NotificationService {
      * - Leaders: Always notified
      * - Assignees: Notified
      */
-    public void notifyTaskStatusChanged(Task task, Project project, String oldStatus, String newStatus, String changedByUserId) {
+    public void notifyTaskStatusChanged(Task task, Project project, String oldStatus, String newStatus, Long changedByUserId) {
         log.info("Creating notifications for task status change: {} -> {}", oldStatus, newStatus);
         
-        Set<String> notifiedUsers = new HashSet<>();
+        Set<Long> notifiedUsers = new HashSet<>();
         String title = "Task Status Updated";
         String message = "Task '" + task.getTitle() + "' status changed from " + oldStatus + " to " + newStatus;
 
         // Notify team leaders if project belongs to a team
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
-            Set<String> leaders = getTeamLeadersAndOwner(project.getTeamId());
-            for (String leaderId : leaders) {
+        if (project.getTeamId() != null) {
+            Set<Long> leaders = getTeamLeadersAndOwner(project.getTeamId());
+            for (Long leaderId : leaders) {
                 if (!leaderId.equals(changedByUserId) && notifiedUsers.add(leaderId)) {
                     createNotification(leaderId, "TASK_STATUS_CHANGED", title, message,
                                       task.getId(), "task");
@@ -250,8 +255,9 @@ public class NotificationService {
         }
 
         // Notify assignees
-        if (task.getAssigneeIds() != null) {
-            for (String assigneeId : task.getAssigneeIds()) {
+        if (task.getAssignees() != null) {
+            for (User assignee : task.getAssignees()) {
+                Long assigneeId = assignee.getId();
                 if (!assigneeId.equals(changedByUserId) && notifiedUsers.add(assigneeId)) {
                     createNotification(assigneeId, "TASK_STATUS_CHANGED", title, message,
                                       task.getId(), "task");
@@ -263,10 +269,11 @@ public class NotificationService {
     /**
      * Notify when user is assigned to a task
      */
-    public void notifyTaskAssigned(Task task, List<String> newAssigneeIds, String assignedByUserId) {
+    public void notifyTaskAssigned(Task task, Set<User> newAssignees, Long assignedByUserId) {
         log.info("Creating notifications for task assignment: {}", task.getTitle());
         
-        for (String assigneeId : newAssigneeIds) {
+        for (User assignee : newAssignees) {
+            Long assigneeId = assignee.getId();
             if (!assigneeId.equals(assignedByUserId)) {
                 createNotification(assigneeId, "TASK_ASSIGNED",
                                   "Task Assigned to You",
@@ -280,9 +287,9 @@ public class NotificationService {
      * Notify when task due date is approaching (can be called by a scheduled job)
      */
     public void notifyTaskDueSoon(Task task) {
-        if (task.getAssigneeIds() != null) {
-            for (String assigneeId : task.getAssigneeIds()) {
-                createNotification(assigneeId, "TASK_DUE_SOON",
+        if (task.getAssignees() != null) {
+            for (User assignee : task.getAssignees()) {
+                createNotification(assignee.getId(), "TASK_DUE_SOON",
                                   "Task Due Soon",
                                   "Task '" + task.getTitle() + "' is due soon",
                                   task.getId(), "task");
