@@ -1,42 +1,58 @@
 package com.example.webapp.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * Notification entity for JPA
+ * Represents a notification for a user
+ */
+@Entity
+@Table(
+    name = "notifications",
+    indexes = {
+        @Index(name = "idx_notification_user_read", columnList = "user_id,read_flag"),
+        @Index(name = "idx_notification_user_created", columnList = "user_id,created_at")
+    }
+)
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "notifications")
-@CompoundIndexes({
-    @CompoundIndex(name = "user_read_idx", def = "{'userId': 1, 'read': 1}"),
-    @CompoundIndex(name = "user_created_idx", def = "{'userId': 1, 'createdAt': -1}")
-})
 public class Notification {
+    
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     
-    private String userId;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
     
-    private String type; // PROJECT_CREATED, TASK_CREATED, TASK_STATUS_CHANGED, TASK_ASSIGNED, MEMBER_ADDED, etc.
+    @Column(name = "notification_type", nullable = false)
+    private String notificationType;
     
-    private String title;
-    
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String message;
     
-    private String referenceId; // ID of the related entity (project, task, etc.)
+    @Column(name = "read_flag", nullable = false)
+    private Boolean read;
     
-    private String referenceType; // "project", "task", "team"
-    
-    private boolean read;
-    
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private User user;
+    
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        if (read == null) {
+            read = false;
+        }
+    }
 }

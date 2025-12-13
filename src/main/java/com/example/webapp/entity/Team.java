@@ -1,22 +1,18 @@
 package com.example.webapp.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * Team entity for MongoDB
+ * Team entity for JPA
  * Represents a team with a manager and members
  */
-@Document(collection = "teams")
+@Entity
+@Table(name = "teams")
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,22 +20,55 @@ import java.util.List;
 public class Team {
     
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     
-    @Indexed
+    @Column(nullable = false)
     private String name;
     
-    @Indexed
-    private String managerEmail;
+    @Column(name = "manager_id", nullable = false)
+    private Long managerId;
     
-    @Builder.Default
-    private List<String> memberIds = new ArrayList<>();
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private User manager;
     
-    @Builder.Default
-    private List<String> leaderIds = new ArrayList<>();
-    
-    @Builder.Default
-    private List<String> inviteEmails = new ArrayList<>();
-    
+    @Column(nullable = false)
     private LocalDateTime createdAt;
+    
+    // Junction table for regular members
+    @ManyToMany
+    @JoinTable(
+        name = "team_members",
+        joinColumns = @JoinColumn(name = "team_id"),
+        inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<User> members = new HashSet<>();
+    
+    // Junction table for team leaders
+    @ManyToMany
+    @JoinTable(
+        name = "team_leaders",
+        joinColumns = @JoinColumn(name = "team_id"),
+        inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<User> leaders = new HashSet<>();
+    
+    // Projects in this team
+    @OneToMany(mappedBy = "team")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Project> projects = new HashSet<>();
+    
+    // Messages in this team
+    @OneToMany(mappedBy = "team")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Message> messages = new HashSet<>();
 }

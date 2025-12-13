@@ -1,62 +1,62 @@
 package com.example.webapp.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 /**
- * Message entity for MongoDB
- * Represents chat messages in team or task channels
+ * Message entity for JPA
+ * Represents a message in a team or task channel
+ * Supports polymorphic relationships via channelType and channelId
  */
-@Document(collection = "messages")
+@Entity
+@Table(name = "messages")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@CompoundIndex(name = "channel_created_idx", def = "{'channelType': 1, 'channelId': 1, 'createdAt': -1}")
 public class Message {
     
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     
-    /**
-     * Type of channel: "team" or "task"
-     */
-    @Indexed
-    private String channelType;
+    @Column(name = "sender_id", nullable = false)
+    private Long senderId;
     
-    /**
-     * ID of the team or task
-     */
-    @Indexed
-    private String channelId;
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String content;
     
-    /**
-     * Email of the user who sent the message
-     */
-    @Indexed
-    private String senderId;
+    @Column(name = "channel_type", nullable = false)
+    private String channelType; // "TEAM" or "TASK"
     
-    /**
-     * Message content
-     */
-    private String text;
+    @Column(name = "channel_id", nullable = false)
+    private Long channelId; // team_id or task_id depending on channelType
     
-    /**
-     * When the message was created
-     */
-    @Indexed
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     
-    /**
-     * Sender's name (denormalized for display)
-     */
-    private String senderName;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sender_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private User sender;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "channel_id", insertable = false, updatable = false, foreignKey = @ForeignKey(value = ConstraintMode.NO_CONSTRAINT))
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Team team;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "channel_id", insertable = false, updatable = false, foreignKey = @ForeignKey(value = ConstraintMode.NO_CONSTRAINT))
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Task task;
+    
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }

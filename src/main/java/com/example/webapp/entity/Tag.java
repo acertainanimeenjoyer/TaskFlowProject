@@ -1,36 +1,46 @@
 package com.example.webapp.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * Tag entity for MongoDB
+ * Tag entity for JPA
  * Represents tags that can be applied to tasks within a project
  */
-@Document(collection = "tags")
+@Entity
+@Table(name = "tags", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"project_id", "name"})
+})
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@CompoundIndex(name = "project_name_unique_idx", def = "{'projectId': 1, 'name': 1}", unique = true)
 public class Tag {
     
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     
-    @Indexed
-    private String projectId;
+    @Column(name = "project_id", nullable = false)
+    private Long projectId;
     
+    @Column(nullable = false)
     private String name;
     
+    @Column(nullable = false)
     private String color;
-    
-    @Indexed
-    private String createdBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Project project;
+
+    @ManyToMany(mappedBy = "tags")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Task> tasks = new HashSet<>();
 }

@@ -1,17 +1,16 @@
 package com.example.webapp.entity;
 
+import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
 /**
- * UserProfile Entity (MongoDB)
+ * UserProfile Entity (JPA)
  * User profile data including scores and media file IDs
  */
-@Document(collection = "user_profiles")
+@Entity
+@Table(name = "user_profiles")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -19,18 +18,33 @@ import java.time.LocalDateTime;
 public class UserProfile {
 
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    @Indexed(unique = true)
+    @Column(unique = true, nullable = false)
     private String email;
 
-    private String avatarId;          // GridFS File ID for avatar
+    @Column(name = "avatar_id")
+    private String avatarId;          // GridFS File ID for avatar (or file path reference)
     
-    private String profilePicId;      // GridFS File ID
+    @Column(name = "profile_pic_id")
+    private String profilePicId;      // GridFS File ID (or file path reference)
 
-    @Builder.Default
-    private int hiScore = 0;
+    @Column(name = "hi_score")
+    private int hiScore;
 
-    @Builder.Default
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    @OneToOne(mappedBy = "profile")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private User user;
+
+    @PrePersist
+    @PreUpdate
+    public void updateTimestamp() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }
+

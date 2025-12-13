@@ -1,42 +1,43 @@
 package com.example.webapp.repository;
 
 import com.example.webapp.entity.Project;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * MongoDB repository for Project entity
+ * JPA repository for Project entity
  */
 @Repository
-public interface ProjectRepository extends MongoRepository<Project, String> {
+public interface ProjectRepository extends JpaRepository<Project, Long> {
     
     /**
      * Find projects by owner ID
      */
-    List<Project> findByOwnerId(String ownerId);
+    List<Project> findByOwnerId(Long ownerId);
     
     /**
      * Find projects where user is a member
      */
-    List<Project> findByMemberIdsContaining(String userId);
+    @Query("SELECT p FROM Project p JOIN p.members m WHERE m.id = :userId")
+    List<Project> findProjectsByMember(Long userId);
     
     /**
      * Find projects where user is owner or member
      */
-    @Query("{'$or': [{'ownerId': ?0}, {'memberIds': ?0}]}")
-    List<Project> findByOwnerIdOrMemberIdsContaining(String userId);
+    @Query("SELECT DISTINCT p FROM Project p WHERE p.ownerId = :userId OR :userId IN (SELECT m.id FROM p.members m)")
+    List<Project> findByOwnerIdOrMemberIdsContaining(Long userId);
     
     /**
      * Find project by ID and owner ID (for authorization)
      */
-    Optional<Project> findByIdAndOwnerId(String id, String ownerId);
+    Optional<Project> findByIdAndOwnerId(Long id, Long ownerId);
     
     /**
      * Find all projects in a team
      */
-    List<Project> findByTeamId(String teamId);
+    List<Project> findByTeamId(Long teamId);
 }

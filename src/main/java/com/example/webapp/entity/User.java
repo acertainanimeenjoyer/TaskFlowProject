@@ -1,17 +1,21 @@
 package com.example.webapp.entity;
 
+import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * User Entity (MongoDB)
+ * User Entity (JPA)
  * Core user authentication data
  */
-@Document(collection = "users")
+@Entity
+@Table(name = "users", uniqueConstraints = {
+    @UniqueConstraint(columnNames = "email"),
+    @UniqueConstraint(columnNames = "username")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -19,18 +23,72 @@ import java.time.LocalDateTime;
 public class User {
 
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    @Indexed(unique = true)
+    @Column(unique = true, nullable = false)
     private String email;
 
-    @Indexed(unique = true)
+    @Column(unique = true, nullable = false)
     private String username;
 
+    @Column(nullable = false)
     private String name;
 
+    @Column(nullable = false)
     private String passwordHash;
 
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
+
+    // Relationships
+    @OneToOne(cascade = CascadeType.ALL, optional = true)
+    @JoinColumn(name = "profile_id")
+    private UserProfile profile;
+
+    @OneToMany(mappedBy = "manager")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Team> managedTeams = new HashSet<>();
+
+    @ManyToMany(mappedBy = "members")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Team> teams = new HashSet<>();
+
+    @ManyToMany(mappedBy = "leaders")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Team> leaderTeams = new HashSet<>();
+
+    @OneToMany(mappedBy = "owner")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Project> ownedProjects = new HashSet<>();
+
+    @ManyToMany(mappedBy = "members")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Project> memberProjects = new HashSet<>();
+
+    @ManyToMany(mappedBy = "assignees")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Task> assignedTasks = new HashSet<>();
+
+    @OneToMany(mappedBy = "author")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Comment> comments = new HashSet<>();
+
+    @OneToMany(mappedBy = "sender")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Message> messages = new HashSet<>();
+
+    @OneToMany(mappedBy = "user")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Notification> notifications = new HashSet<>();
 }
+

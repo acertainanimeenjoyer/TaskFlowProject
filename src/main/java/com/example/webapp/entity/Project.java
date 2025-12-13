@@ -1,22 +1,18 @@
 package com.example.webapp.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * Project entity for MongoDB
+ * Project entity for JPA
  * Represents a project with an owner and members
  */
-@Document(collection = "projects")
+@Entity
+@Table(name = "projects")
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,21 +20,59 @@ import java.util.List;
 public class Project {
     
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     
-    @Indexed
+    @Column(nullable = false)
     private String name;
     
+    @Column(columnDefinition = "TEXT")
     private String description;
     
-    @Indexed
-    private String ownerId;
+    @Column(name = "owner_id", nullable = false)
+    private Long ownerId;
     
-    @Indexed
-    private String teamId;
+    @Column(name = "team_id", nullable = false)
+    private Long teamId;
     
-    @Builder.Default
-    private List<String> memberIds = new ArrayList<>();
-    
+    @Column(nullable = false)
     private LocalDateTime createdAt;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private User owner;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Team team;
+    
+    // Junction table for project members
+    @ManyToMany
+    @JoinTable(
+        name = "project_members",
+        joinColumns = @JoinColumn(name = "project_id"),
+        inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<User> members = new HashSet<>();
+    
+    @OneToMany(mappedBy = "project")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Task> tasks = new HashSet<>();
+    
+    @OneToMany(mappedBy = "project")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Tag> tags = new HashSet<>();
+    
+    @OneToMany(mappedBy = "project")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Message> messages = new HashSet<>();
 }

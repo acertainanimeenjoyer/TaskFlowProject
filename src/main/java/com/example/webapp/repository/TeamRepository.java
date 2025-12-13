@@ -1,30 +1,44 @@
 package com.example.webapp.repository;
 
 import com.example.webapp.entity.Team;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import com.example.webapp.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * MongoDB repository for Team entity
+ * JPA repository for Team entity
  */
 @Repository
-public interface TeamRepository extends MongoRepository<Team, String> {
+public interface TeamRepository extends JpaRepository<Team, Long> {
     
     /**
-     * Find teams by manager email
+     * Find teams by manager
      */
-    List<Team> findByManagerEmail(String managerEmail);
+    List<Team> findByManager(User manager);
+    
+    /**
+     * Find teams by manager ID
+     */
+    List<Team> findByManagerId(Long managerId);
     
     /**
      * Find teams where user is a member
      */
-    List<Team> findByMemberIdsContaining(String userId);
+    @Query("SELECT t FROM Team t JOIN t.members m WHERE m.id = :userId")
+    List<Team> findTeamsByMember(Long userId);
     
     /**
-     * Find team by ID and manager email (for authorization)
+     * Find teams where user is a leader
      */
-    Optional<Team> findByIdAndManagerEmail(String id, String managerEmail);
+    @Query("SELECT t FROM Team t JOIN t.leaders l WHERE l.id = :userId")
+    List<Team> findTeamsByLeader(Long userId);
+    
+    /**
+     * Find team by ID and manager ID (for authorization)
+     */
+    Optional<Team> findByIdAndManagerId(Long id, Long managerId);
 }

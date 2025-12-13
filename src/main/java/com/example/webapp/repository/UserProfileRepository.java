@@ -1,22 +1,19 @@
 package com.example.webapp.repository;
 
 import com.example.webapp.entity.UserProfile;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
 /**
- * UserProfileRepository
- * MongoDB repository for UserProfile documents
+ * JPA Repository for UserProfile entities
  */
 @Repository
-public interface UserProfileRepository extends MongoRepository<UserProfile, String> {
+public interface UserProfileRepository extends JpaRepository<UserProfile, Long> {
     
     /**
-     * Find UserProfile by email
-     * @param email User email
-     * @return Optional containing UserProfile if found
+     * Find user profile by email
      */
     Optional<UserProfile> findByEmail(String email);
 }

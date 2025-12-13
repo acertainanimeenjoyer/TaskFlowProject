@@ -1,44 +1,70 @@
 package com.example.webapp.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * Comment entity for MongoDB
- * Represents comments on tasks with support for nested replies
+ * Comment entity for JPA
+ * Represents a comment on a task with support for nested replies
  */
-@Document(collection = "comments")
+@Entity
+@Table(name = "comments")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@CompoundIndex(name = "task_created_idx", def = "{'taskId': 1, 'createdAt': -1}")
 public class Comment {
     
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     
-    @Indexed
-    private String taskId;
+    @Column(name = "task_id", nullable = false)
+    private Long taskId;
     
-    @Indexed
-    private String authorId;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
     
-    private String text;
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String content;
     
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     
-    /**
-     * Parent comment ID for nested replies (null for top-level comments)
-     */
-    @Indexed
-    private String parentId;
+    @Column(name = "parent_id")
+    private Long parentId;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Task task;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private User author;
+    
+    // Self-referencing for parent comment
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id", insertable = false, updatable = false)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Comment parent;
+    
+    // Nested replies
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<Comment> replies = new HashSet<>();
+    
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }
