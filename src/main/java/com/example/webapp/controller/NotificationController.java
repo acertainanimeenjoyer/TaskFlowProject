@@ -102,7 +102,7 @@ public class NotificationController {
      */
     @PutMapping("/{id}/read")
     public ResponseEntity<Void> markAsRead(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         String userEmail = authentication.getName();

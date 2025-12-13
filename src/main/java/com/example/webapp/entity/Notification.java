@@ -31,10 +31,19 @@ public class Notification {
     private Long userId;
     
     @Column(name = "notification_type", nullable = false)
-    private String notificationType;
+    private String type;
+    
+    @Column(nullable = false)
+    private String title;
     
     @Column(columnDefinition = "TEXT", nullable = false)
     private String message;
+    
+    @Column(name = "reference_id")
+    private Long referenceId;
+    
+    @Column(name = "reference_type")
+    private String referenceType;
     
     @Column(name = "read_flag", nullable = false)
     private Boolean read;
