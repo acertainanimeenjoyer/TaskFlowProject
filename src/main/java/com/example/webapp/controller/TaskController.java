@@ -50,7 +50,7 @@ public class TaskController {
      */
     @PostMapping("/projects/{projectId}/tasks")
     public ResponseEntity<?> createTask(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             @Valid @RequestBody CreateTaskRequest request,
             Authentication authentication) {
         
@@ -89,10 +89,10 @@ public class TaskController {
      */
     @GetMapping("/projects/{projectId}/tasks")
     public ResponseEntity<?> getProjectTasks(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String assigneeId,
-            @RequestParam(required = false) String tagId,
+            @RequestParam(required = false) Long assigneeId,
+            @RequestParam(required = false) Long tagId,
             @RequestParam(required = false) String priority,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dueDateStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dueDateEnd,
@@ -142,7 +142,7 @@ public class TaskController {
      */
     @GetMapping("/projects/{projectId}/tasks/search")
     public ResponseEntity<?> searchTasks(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             @RequestParam String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -181,7 +181,7 @@ public class TaskController {
      */
     @GetMapping("/projects/{projectId}/tasks/overdue")
     public ResponseEntity<?> getOverdueTasks(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
@@ -219,7 +219,7 @@ public class TaskController {
      */
     @GetMapping("/projects/{projectId}/tasks/statistics")
     public ResponseEntity<?> getTaskStatistics(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             Authentication authentication) {
         
         try {
@@ -246,7 +246,7 @@ public class TaskController {
      */
     @GetMapping("/tasks/{id}")
     public ResponseEntity<?> getTask(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -278,7 +278,7 @@ public class TaskController {
      */
     @PutMapping("/tasks/{id}")
     public ResponseEntity<?> updateTask(
-            @PathVariable String id,
+            @PathVariable Long id,
             @Valid @RequestBody UpdateTaskRequest request,
             Authentication authentication) {
         
@@ -310,7 +310,7 @@ public class TaskController {
      */
     @DeleteMapping("/tasks/{id}")
     public ResponseEntity<?> deleteTask(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -367,16 +367,20 @@ public class TaskController {
      */
     private TaskResponse mapToResponse(Task task) {
         return TaskResponse.builder()
-                .id(task.getId())
-                .projectId(task.getProjectId())
+                .id(task.getId() != null ? String.valueOf(task.getId()) : null)
+                .projectId(task.getProjectId() != null ? String.valueOf(task.getProjectId()) : null)
                 .title(task.getTitle())
                 .description(task.getDescription())
                 .status(task.getStatus())
                 .priority(task.getPriority())
                 .dueDate(task.getDueDate())
-                .createdBy(task.getCreatedBy())
-                .assigneeIds(task.getAssigneeIds())
-                .tagIds(task.getTagIds())
+                .createdBy(task.getCreatedBy() != null ? String.valueOf(task.getCreatedBy()) : null)
+                .assigneeIds(task.getAssignees() != null ? 
+                        task.getAssignees().stream().map(u -> String.valueOf(u.getId())).toList() : 
+                        java.util.Collections.emptyList())
+                .tagIds(task.getTags() != null ? 
+                        task.getTags().stream().map(t -> String.valueOf(t.getId())).toList() : 
+                        java.util.Collections.emptyList())
                 .createdAt(task.getCreatedAt())
                 .updatedAt(task.getUpdatedAt())
                 .isOverdue(taskService.isOverdue(task))
