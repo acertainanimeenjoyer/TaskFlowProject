@@ -93,72 +93,55 @@ public class TeamService {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found"));
         
+        // Get user
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
         // Check if already a member
-        if (team.getMemberIds().contains(userId)) {
+        if (team.getMembers().contains(user)) {
             throw new IllegalArgumentException("You are already a member of this team");
         }
         
-        // Check if invited
-        if (!team.getInviteEmails().contains(userEmail)) {
-            throw new IllegalArgumentException("You are not invited to this team");
-        }
-        
-        // Atomic operation: check member count and add member
-        Query query = new Query(Criteria.where("_id").is(teamId));
-        
-        Update update = new Update()
-                .addToSet("memberIds", userId)
-                .pull("inviteEmails", userEmail);
-        
-        // First check if team has space
-        Team currentTeam = teamRepository.findById(teamId).orElseThrow();
-        if (currentTeam.getMemberIds().size() >= MAX_MEMBERS) {
+        // Check if team has space
+        if (team.getMembers().size() >= MAX_MEMBERS) {
             throw new IllegalArgumentException("Team has reached maximum member limit of " + MAX_MEMBERS);
         }
         
-        Team updatedTeam = mongoTemplate.findAndModify(
-                query, 
-                update, 
-                Team.class
-        );
+        // Add user to members
+        team.getMembers().add(user);
+        Team savedTeam = teamRepository.save(team);
         
-        if (updatedTeam == null) {
-            throw new IllegalArgumentException("Failed to join team");
-        }
-        
-        log.info("User {} successfully joined team {}", userEmail, teamId);
-        
-        // Return updated team
-        return teamRepository.findById(teamId).orElseThrow();
+        log.info("User {} successfully joined team {}", userId, teamId);
+        return savedTeam;
     }
     
     /**
      * Leave a team
      * Manager cannot leave unless they transfer ownership first
      */
-    public Team leaveTeam(String teamId, String userId) {
+    public Team leaveTeam(Long teamId, Long userId) {
         log.info("User {} attempting to leave team {}", userId, teamId);
         
         // Verify team exists
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found"));
         
-        // Verify user is a member
-        if (!team.getMemberIds().contains(userId)) {
-            throw new IllegalArgumentException("You are not a member of this team");
-        }
-        
-        // Get user email to check if manager
+        // Get user
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
+        // Verify user is a member
+        if (!team.getMembers().contains(user)) {
+            throw new IllegalArgumentException("You are not a member of this team");
+        }
+        
         // Check if user is the manager
-        if (team.getManagerEmail().equals(user.getEmail())) {
+        if (team.getManagerId().equals(userId)) {
             throw new IllegalArgumentException("Manager cannot leave the team. Transfer ownership first or delete the team.");
         }
         
         // Remove from members
-        team.getMemberIds().remove(userId);
+        team.getMembers().remove(user);
         Team savedTeam = teamRepository.save(team);
         
         log.info("User {} successfully left team {}", userId, teamId);
@@ -168,44 +151,45 @@ public class TeamService {
     /**
      * Get team by ID
      */
-    public Optional<Team> getTeamById(String teamId) {
+    public Optional<Team> getTeamById(Long teamId) {
         return teamRepository.findById(teamId);
     }
     
     /**
      * Get teams where user is manager
      */
-    public java.util.List<Team> getTeamsByManager(String managerEmail) {
-        return teamRepository.findByManagerEmail(managerEmail);
+    public java.util.List<Team> getTeamsByManager(Long managerId) {
+        return teamRepository.findByManagerId(managerId);
     }
     
     /**
      * Get teams where user is a member
      */
-    public java.util.List<Team> getTeamsByMember(String userId) {
-        return teamRepository.findByMemberIdsContaining(userId);
+    public java.util.List<Team> getTeamsByMember(Long userId) {
+        return teamRepository.findTeamsByMember(userId);
     }
     
     /**
      * Promote a member to team leader
      * Only the manager (owner) can promote members to leaders
      */
-    public Team promoteMember(String teamId, String actingUserId, String targetUserId) {
+    public Team promoteMember(Long teamId, Long actingUserId, Long targetUserId) {
         log.info("User {} promoting member {} to leader in team {}", actingUserId, targetUserId, teamId);
         
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found"));
         
         // Verify acting user is the manager
-        User actingUser = userRepository.findById(actingUserId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        
-        if (!team.getManagerEmail().equals(actingUser.getEmail())) {
+        if (!team.getManagerId().equals(actingUserId)) {
             throw new IllegalArgumentException("Only the team owner can promote members");
         }
         
+        // Get target user
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Target user not found"));
+        
         // Verify target is a member
-        if (!team.getMemberIds().contains(targetUserId)) {
+        if (!team.getMembers().contains(targetUser)) {
             throw new IllegalArgumentException("User is not a member of this team");
         }
         
@@ -215,16 +199,11 @@ public class TeamService {
         }
         
         // Check if already a leader
-        if (team.getLeaderIds() != null && team.getLeaderIds().contains(targetUserId)) {
+        if (team.getLeaders().contains(targetUser)) {
             throw new IllegalArgumentException("User is already a team leader");
         }
         
-        // Initialize leaderIds if null
-        if (team.getLeaderIds() == null) {
-            team.setLeaderIds(new ArrayList<>());
-        }
-        
-        team.getLeaderIds().add(targetUserId);
+        team.getLeaders().add(targetUser);
         Team savedTeam = teamRepository.save(team);
         
         log.info("User {} promoted to leader in team {}", targetUserId, teamId);
@@ -235,26 +214,27 @@ public class TeamService {
      * Demote a leader back to regular member
      * Only the manager (owner) can demote leaders
      */
-    public Team demoteMember(String teamId, String actingUserId, String targetUserId) {
+    public Team demoteMember(Long teamId, Long actingUserId, Long targetUserId) {
         log.info("User {} demoting leader {} in team {}", actingUserId, targetUserId, teamId);
         
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found"));
         
         // Verify acting user is the manager
-        User actingUser = userRepository.findById(actingUserId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        
-        if (!team.getManagerEmail().equals(actingUser.getEmail())) {
+        if (!team.getManagerId().equals(actingUserId)) {
             throw new IllegalArgumentException("Only the team owner can demote leaders");
         }
         
+        // Get target user
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Target user not found"));
+        
         // Check if target is a leader
-        if (team.getLeaderIds() == null || !team.getLeaderIds().contains(targetUserId)) {
+        if (!team.getLeaders().contains(targetUser)) {
             throw new IllegalArgumentException("User is not a team leader");
         }
         
-        team.getLeaderIds().remove(targetUserId);
+        team.getLeaders().remove(targetUser);
         Team savedTeam = teamRepository.save(team);
         
         log.info("User {} demoted from leader in team {}", targetUserId, teamId);
@@ -266,34 +246,32 @@ public class TeamService {
      * Manager can kick anyone (members and leaders)
      * Leaders can kick regular members only (not other leaders or the manager)
      */
-    public Team kickMember(String teamId, String actingUserId, String targetUserId) {
+    public Team kickMember(Long teamId, Long actingUserId, Long targetUserId) {
         log.info("User {} kicking member {} from team {}", actingUserId, targetUserId, teamId);
         
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found"));
         
-        // Verify acting user exists
+        // Get users
         User actingUser = userRepository.findById(actingUserId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        
-        // Verify target is a member
-        if (!team.getMemberIds().contains(targetUserId)) {
-            throw new IllegalArgumentException("User is not a member of this team");
-        }
-        
-        // Get target user info
         User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Target user not found"));
+        
+        // Verify target is a member
+        if (!team.getMembers().contains(targetUser)) {
+            throw new IllegalArgumentException("User is not a member of this team");
+        }
         
         // Can't kick yourself
         if (actingUserId.equals(targetUserId)) {
             throw new IllegalArgumentException("You cannot kick yourself. Use leave instead.");
         }
         
-        boolean isActingManager = team.getManagerEmail().equals(actingUser.getEmail());
-        boolean isActingLeader = team.getLeaderIds() != null && team.getLeaderIds().contains(actingUserId);
-        boolean isTargetManager = team.getManagerEmail().equals(targetUser.getEmail());
-        boolean isTargetLeader = team.getLeaderIds() != null && team.getLeaderIds().contains(targetUserId);
+        boolean isActingManager = team.getManagerId().equals(actingUserId);
+        boolean isActingLeader = team.getLeaders().contains(actingUser);
+        boolean isTargetManager = team.getManagerId().equals(targetUserId);
+        boolean isTargetLeader = team.getLeaders().contains(targetUser);
         
         // Can't kick the manager
         if (isTargetManager) {
@@ -311,12 +289,9 @@ public class TeamService {
         }
         
         // Remove from members
-        team.getMemberIds().remove(targetUserId);
-        
+        team.getMembers().remove(targetUser);
         // Also remove from leaders if they were a leader
-        if (team.getLeaderIds() != null) {
-            team.getLeaderIds().remove(targetUserId);
-        }
+        team.getLeaders().remove(targetUser);
         
         Team savedTeam = teamRepository.save(team);
         
@@ -327,30 +302,30 @@ public class TeamService {
     /**
      * Check if user is the team owner/manager
      */
-    public boolean isTeamOwner(String teamId, String userId) {
+    public boolean isTeamOwner(Long teamId, Long userId) {
+        Team team = teamRepository.findById(teamId).orElse(null);
+        if (team == null) return false;
+        
+        return team.getManagerId().equals(userId);
+    }
+    
+    /**
+     * Check if user is a team leader (promoted member)
+     */
+    public boolean isTeamLeader(Long teamId, Long userId) {
         Team team = teamRepository.findById(teamId).orElse(null);
         if (team == null) return false;
         
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return false;
         
-        return team.getManagerEmail().equals(user.getEmail());
-    }
-    
-    /**
-     * Check if user is a team leader (promoted member)
-     */
-    public boolean isTeamLeader(String teamId, String userId) {
-        Team team = teamRepository.findById(teamId).orElse(null);
-        if (team == null) return false;
-        
-        return team.getLeaderIds() != null && team.getLeaderIds().contains(userId);
+        return team.getLeaders().contains(user);
     }
     
     /**
      * Check if user is owner or leader
      */
-    public boolean isOwnerOrLeader(String teamId, String userId) {
+    public boolean isOwnerOrLeader(Long teamId, Long userId) {
         return isTeamOwner(teamId, userId) || isTeamLeader(teamId, userId);
     }
 }

@@ -10,9 +10,9 @@ import com.example.webapp.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -38,26 +38,34 @@ public class ProjectService {
     private NotificationService notificationService;
     
     /**
-     * Create a new project with the given owner
+     * Create a new project with the given owner ID
      */
-    public Project createProject(String ownerId, CreateProjectRequest request) {
-        log.info("Creating project '{}' with owner: {}", request.getName(), ownerId);
+    @Transactional
+    public Project createProject(Long ownerId, CreateProjectRequest request) {
+        log.info("Creating project '{}' with owner ID: {}", request.getName(), ownerId);
         
         // Verify owner exists
-        userRepository.findById(ownerId)
+        User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("Owner user not found"));
+        
+        // Verify team exists if provided
+        Long teamId = request.getTeamId();
+        if (teamId != null) {
+            teamRepository.findById(teamId)
+                    .orElseThrow(() -> new IllegalArgumentException("Team not found"));
+        }
         
         Project project = Project.builder()
                 .name(request.getName())
                 .description(request.getDescription())
                 .ownerId(ownerId)
-                .teamId(request.getTeamId())
-                .memberIds(new ArrayList<>())
+                .teamId(teamId)
+                .members(new HashSet<>())
                 .createdAt(LocalDateTime.now())
                 .build();
         
         // Add owner as first member
-        project.getMemberIds().add(ownerId);
+        project.getMembers().add(owner);
         
         Project savedProject = projectRepository.save(project);
         log.info("Project created with ID: {}", savedProject.getId());
@@ -73,42 +81,53 @@ public class ProjectService {
      * - Projects where user is owner or member
      * - Projects in teams where user is team owner or leader
      */
-    public List<Project> getProjectsForUser(String userId) {
+    public List<Project> getProjectsForUser(Long userId) {
         log.info("Fetching projects for user: {}", userId);
         
-        // Get user to check email for team ownership
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (userOpt.isEmpty()) {
-            return new ArrayList<>();
-        }
-        User user = userOpt.get();
+        // Get user to check for team access
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
         // Use a set to avoid duplicates
         Set<Project> projectSet = new HashSet<>();
         
-        // 1. Projects where user is owner or member
-        projectSet.addAll(projectRepository.findByOwnerIdOrMemberIdsContaining(userId));
-        
-        // 2. Projects from teams where user is owner or leader
-        List<Team> teams = teamRepository.findByMemberIdsContaining(userId);
-        for (Team team : teams) {
-            boolean isTeamOwner = team.getManagerEmail().equals(user.getEmail());
-            boolean isTeamLeader = team.getLeaderIds() != null && team.getLeaderIds().contains(userId);
-            
-            if (isTeamOwner || isTeamLeader) {
-                // Get all projects in this team
-                List<Project> teamProjects = projectRepository.findByTeamId(team.getId());
-                projectSet.addAll(teamProjects);
+        // 1. Projects where user is owner or member - check all projects
+        List<Project> allProjects = projectRepository.findAll();
+        for (Project p : allProjects) {
+            // User is owner
+            if (p.getOwnerId().equals(userId)) {
+                projectSet.add(p);
+                continue;
+            }
+            // User is direct member
+            if (p.getMembers().stream().anyMatch(m -> m.getId().equals(userId))) {
+                projectSet.add(p);
+                continue;
+            }
+            // Check team access if project belongs to team
+            if (p.getTeamId() != null) {
+                Optional<Team> teamOpt = teamRepository.findById(p.getTeamId());
+                if (teamOpt.isPresent()) {
+                    Team team = teamOpt.get();
+                    // User is team manager
+                    if (team.getManagerId().equals(userId)) {
+                        projectSet.add(p);
+                    }
+                    // User is team leader
+                    else if (team.getLeaders().stream().anyMatch(l -> l.getId().equals(userId))) {
+                        projectSet.add(p);
+                    }
+                }
             }
         }
         
-        return new ArrayList<>(projectSet);
+        return List.copyOf(projectSet);
     }
     
     /**
      * Get project by ID
      */
-    public Optional<Project> getProjectById(String projectId) {
+    public Optional<Project> getProjectById(Long projectId) {
         return projectRepository.findById(projectId);
     }
     
@@ -116,7 +135,8 @@ public class ProjectService {
      * Add a member to a project
      * Can be done by project owner, or team owner/leader if project belongs to a team
      */
-    public Project addMember(String projectId, String actingUserId, String targetUserId) {
+    @Transactional
+    public Project addMember(Long projectId, Long actingUserId, Long targetUserId) {
         log.info("User {} adding member {} to project {}", actingUserId, targetUserId, projectId);
         
         // Verify project exists
@@ -127,20 +147,17 @@ public class ProjectService {
         boolean isProjectOwner = project.getOwnerId().equals(actingUserId);
         boolean isTeamOwnerOrLeader = false;
         
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
+        if (project.getTeamId() != null) {
             Optional<Team> team = teamRepository.findById(project.getTeamId());
             if (team.isPresent()) {
                 Team t = team.get();
-                Optional<User> actingUser = userRepository.findById(actingUserId);
-                if (actingUser.isPresent()) {
-                    // Check if team owner
-                    if (t.getManagerEmail().equals(actingUser.get().getEmail())) {
-                        isTeamOwnerOrLeader = true;
-                    }
-                    // Check if team leader
-                    if (t.getLeaderIds() != null && t.getLeaderIds().contains(actingUserId)) {
-                        isTeamOwnerOrLeader = true;
-                    }
+                // Check if team owner
+                if (t.getManagerId().equals(actingUserId)) {
+                    isTeamOwnerOrLeader = true;
+                }
+                // Check if team leader
+                else if (t.getLeaders().stream().anyMatch(l -> l.getId().equals(actingUserId))) {
+                    isTeamOwnerOrLeader = true;
                 }
             }
         }
@@ -154,20 +171,20 @@ public class ProjectService {
                 .orElseThrow(() -> new IllegalArgumentException("User to add not found"));
         
         // If project belongs to a team, verify user is a team member
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
+        if (project.getTeamId() != null) {
             Optional<Team> team = teamRepository.findById(project.getTeamId());
-            if (team.isPresent() && !team.get().getMemberIds().contains(targetUserId)) {
+            if (team.isPresent() && !team.get().getMembers().stream().anyMatch(m -> m.getId().equals(targetUserId))) {
                 throw new IllegalArgumentException("User must be a team member to be added to this project");
             }
         }
         
         // Check if already a member
-        if (project.getMemberIds().contains(targetUserId)) {
+        if (project.getMembers().stream().anyMatch(m -> m.getId().equals(targetUserId))) {
             throw new IllegalArgumentException("User is already a member of this project");
         }
         
         // Add to members
-        project.getMemberIds().add(targetUserId);
+        project.getMembers().add(userToAdd);
         Project savedProject = projectRepository.save(project);
         
         // Send notification
@@ -183,7 +200,7 @@ public class ProjectService {
      * - Team owner or leader (for team projects)
      * Regular team members cannot see projects unless they're added as project members
      */
-    public boolean hasAccess(String projectId, String userId) {
+    public boolean hasAccess(Long projectId, Long userId) {
         Optional<Project> project = projectRepository.findById(projectId);
         if (project.isEmpty()) {
             return false;
@@ -191,27 +208,28 @@ public class ProjectService {
         
         Project p = project.get();
         
-        // Check if user is project owner or direct member
-        if (p.getOwnerId().equals(userId) || p.getMemberIds().contains(userId)) {
+        // Check if user is project owner
+        if (p.getOwnerId().equals(userId)) {
+            return true;
+        }
+        
+        // Check if user is direct member
+        if (p.getMembers().stream().anyMatch(m -> m.getId().equals(userId))) {
             return true;
         }
         
         // Check if project belongs to a team and user is team owner or leader
-        if (p.getTeamId() != null && !p.getTeamId().isEmpty()) {
+        if (p.getTeamId() != null) {
             Optional<Team> team = teamRepository.findById(p.getTeamId());
             if (team.isPresent()) {
                 Team t = team.get();
-                Optional<User> user = userRepository.findById(userId);
-                
-                if (user.isPresent()) {
-                    // Check if user is team owner
-                    if (t.getManagerEmail().equals(user.get().getEmail())) {
-                        return true;
-                    }
-                    // Check if user is team leader
-                    if (t.getLeaderIds() != null && t.getLeaderIds().contains(userId)) {
-                        return true;
-                    }
+                // Check if user is team owner
+                if (t.getManagerId().equals(userId)) {
+                    return true;
+                }
+                // Check if user is team leader
+                if (t.getLeaders().stream().anyMatch(l -> l.getId().equals(userId))) {
+                    return true;
                 }
             }
         }
@@ -222,7 +240,7 @@ public class ProjectService {
     /**
      * Check if user is project owner
      */
-    public boolean isOwner(String projectId, String userId) {
+    public boolean isOwner(Long projectId, Long userId) {
         Optional<Project> project = projectRepository.findById(projectId);
         return project.isPresent() && project.get().getOwnerId().equals(userId);
     }
@@ -230,7 +248,7 @@ public class ProjectService {
     /**
      * Get all projects in a team
      */
-    public List<Project> getProjectsByTeamId(String teamId) {
+    public List<Project> getProjectsByTeamId(Long teamId) {
         log.info("Fetching projects for team: {}", teamId);
         return projectRepository.findByTeamId(teamId);
     }
@@ -239,7 +257,8 @@ public class ProjectService {
      * Remove a member from a project
      * Can be done by project owner, or team owner/leader if project belongs to a team
      */
-    public Project removeMember(String projectId, String actingUserId, String targetUserId) {
+    @Transactional
+    public Project removeMember(Long projectId, Long actingUserId, Long targetUserId) {
         log.info("User {} removing member {} from project {}", actingUserId, targetUserId, projectId);
         
         // Verify project exists
@@ -255,18 +274,17 @@ public class ProjectService {
         boolean isProjectOwner = project.getOwnerId().equals(actingUserId);
         boolean isTeamOwnerOrLeader = false;
         
-        if (project.getTeamId() != null && !project.getTeamId().isEmpty()) {
+        if (project.getTeamId() != null) {
             Optional<Team> team = teamRepository.findById(project.getTeamId());
             if (team.isPresent()) {
                 Team t = team.get();
-                Optional<User> actingUser = userRepository.findById(actingUserId);
-                if (actingUser.isPresent()) {
-                    if (t.getManagerEmail().equals(actingUser.get().getEmail())) {
-                        isTeamOwnerOrLeader = true;
-                    }
-                    if (t.getLeaderIds() != null && t.getLeaderIds().contains(actingUserId)) {
-                        isTeamOwnerOrLeader = true;
-                    }
+                // Check if team owner
+                if (t.getManagerId().equals(actingUserId)) {
+                    isTeamOwnerOrLeader = true;
+                }
+                // Check if team leader
+                else if (t.getLeaders().stream().anyMatch(l -> l.getId().equals(actingUserId))) {
+                    isTeamOwnerOrLeader = true;
                 }
             }
         }
@@ -276,12 +294,12 @@ public class ProjectService {
         }
         
         // Verify user is a member
-        if (!project.getMemberIds().contains(targetUserId)) {
+        if (!project.getMembers().stream().anyMatch(m -> m.getId().equals(targetUserId))) {
             throw new IllegalArgumentException("User is not a member of this project");
         }
         
         // Remove from members
-        project.getMemberIds().remove(targetUserId);
+        project.getMembers().removeIf(m -> m.getId().equals(targetUserId));
         Project savedProject = projectRepository.save(project);
         
         log.info("User {} removed from project {}", targetUserId, projectId);
@@ -291,11 +309,11 @@ public class ProjectService {
     /**
      * Get team members available to add to a project (not already project members)
      */
-    public List<User> getAvailableTeamMembers(String projectId, String actingUserId) {
+    public List<User> getAvailableTeamMembers(Long projectId, Long actingUserId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
         
-        if (project.getTeamId() == null || project.getTeamId().isEmpty()) {
+        if (project.getTeamId() == null) {
             throw new IllegalArgumentException("Project does not belong to a team");
         }
         
@@ -303,10 +321,12 @@ public class ProjectService {
                 .orElseThrow(() -> new IllegalArgumentException("Team not found"));
         
         // Get all team members who are not already project members
-        List<String> availableIds = team.getMemberIds().stream()
-                .filter(memberId -> !project.getMemberIds().contains(memberId))
-                .toList();
+        Set<Long> projectMemberIds = project.getMembers().stream()
+                .map(User::getId)
+                .collect(java.util.stream.Collectors.toSet());
         
-        return userRepository.findAllById(availableIds);
+        return team.getMembers().stream()
+                .filter(member -> !projectMemberIds.contains(member.getId()))
+                .toList();
     }
 }
