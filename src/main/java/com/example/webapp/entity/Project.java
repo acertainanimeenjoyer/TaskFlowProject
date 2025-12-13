@@ -70,9 +70,4 @@ public class Project {
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
     private Set<Tag> tags = new HashSet<>();
-    
-    @OneToMany(mappedBy = "project")
-    @EqualsAndHashCode.Exclude
-    @ToString.Exclude
-    private Set<Message> messages = new HashSet<>();
 }

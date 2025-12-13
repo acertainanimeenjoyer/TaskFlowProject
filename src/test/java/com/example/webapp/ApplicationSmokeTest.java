@@ -11,7 +11,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 @TestPropertySource(properties = {
-        "spring.data.mongodb.uri=mongodb://localhost:27017/testdb",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.datasource.url=jdbc:h2:mem:testdb",
+        "spring.datasource.driver-class-name=org.h2.Driver",
         "jwt.secret=test-secret-key-for-smoke-tests-must-be-long-enough",
         "jwt.expiration=3600000"
 })
