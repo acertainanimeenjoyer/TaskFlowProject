@@ -36,7 +36,7 @@ public class NotificationController {
                 .message(n.getMessage())
                 .referenceId(n.getReferenceId())
                 .referenceType(n.getReferenceType())
-                .read(n.isRead())
+                .read(n.getRead())
                 .createdAt(n.getCreatedAt())
                 .build();
     }
