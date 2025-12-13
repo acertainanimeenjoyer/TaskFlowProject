@@ -38,7 +38,7 @@ public class ChatController {
     @GetMapping("/{channelType}/{channelId}")
     public ResponseEntity<Page<MessageResponse>> getMessages(
             @PathVariable String channelType,
-            @PathVariable String channelId,
+            @PathVariable Long channelId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             Authentication authentication) {
@@ -52,12 +52,12 @@ public class ChatController {
             
             // Convert to DTOs
             Page<MessageResponse> response = messages.map(msg -> MessageResponse.builder()
-                    .id(msg.getId())
+                    .id(msg.getId() != null ? String.valueOf(msg.getId()) : null)
                     .channelType(msg.getChannelType())
-                    .channelId(msg.getChannelId())
-                    .senderId(msg.getSenderId())
-                    .senderName(msg.getSenderName())
-                    .text(msg.getText())
+                    .channelId(msg.getChannelId() != null ? String.valueOf(msg.getChannelId()) : null)
+                    .senderId(msg.getSenderId() != null ? String.valueOf(msg.getSenderId()) : null)
+                    .senderName(msg.getSender() != null ? msg.getSender().getEmail() : "Unknown")
+                    .text(msg.getContent())
                     .createdAt(msg.getCreatedAt())
                     .build());
             
@@ -82,7 +82,7 @@ public class ChatController {
     @PostMapping("/{channelType}/{channelId}")
     public ResponseEntity<MessageResponse> sendMessage(
             @PathVariable String channelType,
-            @PathVariable String channelId,
+            @PathVariable Long channelId,
             @Valid @RequestBody SendMessageRequest request,
             Authentication authentication) {
         
@@ -94,12 +94,12 @@ public class ChatController {
             Message message = chatService.saveMessage(channelType, channelId, userEmail, request.getText());
             
             MessageResponse response = MessageResponse.builder()
-                    .id(message.getId())
+                    .id(message.getId() != null ? String.valueOf(message.getId()) : null)
                     .channelType(message.getChannelType())
-                    .channelId(message.getChannelId())
-                    .senderId(message.getSenderId())
-                    .senderName(message.getSenderName())
-                    .text(message.getText())
+                    .channelId(message.getChannelId() != null ? String.valueOf(message.getChannelId()) : null)
+                    .senderId(message.getSenderId() != null ? String.valueOf(message.getSenderId()) : null)
+                    .senderName(message.getSender() != null ? message.getSender().getEmail() : "Unknown")
+                    .text(message.getContent())
                     .createdAt(message.getCreatedAt())
                     .build();
             

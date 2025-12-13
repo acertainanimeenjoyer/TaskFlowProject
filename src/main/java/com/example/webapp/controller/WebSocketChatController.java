@@ -45,7 +45,7 @@ public class WebSocketChatController {
                      Principal principal) {
         
         String channelType = payload.get("channelType");
-        String channelId = payload.get("channelId");
+            Long channelId = Long.parseLong(payload.get("channelId"));
         String userEmail = principal.getName();
         
         log.info("WebSocket join - User: {}, Channel: {}/{}", userEmail, channelType, channelId);
@@ -71,7 +71,7 @@ public class WebSocketChatController {
             // Notify channel that user joined
             MessageResponse joinNotification = MessageResponse.builder()
                     .channelType(channelType)
-                    .channelId(channelId)
+                       .channelId(String.valueOf(channelId))
                     .senderId("SYSTEM")
                     .senderName("System")
                     .text(userEmail + " joined the channel")
@@ -113,7 +113,7 @@ public class WebSocketChatController {
     public void leave(@Payload Map<String, String> payload, Principal principal) {
         
         String channelType = payload.get("channelType");
-        String channelId = payload.get("channelId");
+            Long channelId = Long.parseLong(payload.get("channelId"));
         String userEmail = principal.getName();
         
         log.info("WebSocket leave - User: {}, Channel: {}/{}", userEmail, channelType, channelId);
@@ -121,7 +121,7 @@ public class WebSocketChatController {
         // Notify channel that user left
         MessageResponse leaveNotification = MessageResponse.builder()
                 .channelType(channelType)
-                .channelId(channelId)
+                   .channelId(String.valueOf(channelId))
                 .senderId("SYSTEM")
                 .senderName("System")
                 .text(userEmail + " left the channel")
@@ -145,7 +145,7 @@ public class WebSocketChatController {
     public void sendMessage(@Payload Map<String, String> payload, Principal principal) {
         
         String channelType = payload.get("channelType");
-        String channelId = payload.get("channelId");
+            Long channelId = Long.parseLong(payload.get("channelId"));
         String text = payload.get("text");
         String userEmail = principal.getName();
         
@@ -187,12 +187,12 @@ public class WebSocketChatController {
      */
     private MessageResponse convertToResponse(Message message) {
         return MessageResponse.builder()
-                .id(message.getId())
+                    .id(message.getId() != null ? String.valueOf(message.getId()) : null)
                 .channelType(message.getChannelType())
-                .channelId(message.getChannelId())
-                .senderId(message.getSenderId())
-                .senderName(message.getSenderName())
-                .text(message.getText())
+                    .channelId(message.getChannelId() != null ? String.valueOf(message.getChannelId()) : null)
+                    .senderId(message.getSenderId() != null ? String.valueOf(message.getSenderId()) : null)
+                    .senderName(message.getSender() != null ? message.getSender().getEmail() : "Unknown")
+                    .text(message.getContent())
                 .createdAt(message.getCreatedAt())
                 .build();
     }

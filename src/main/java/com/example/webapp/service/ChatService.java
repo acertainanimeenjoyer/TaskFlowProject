@@ -45,7 +45,7 @@ public class ChatService {
      * @param size Page size
      * @return Page of messages
      */
-    public Page<Message> getMessageHistory(String channelType, String channelId, String userEmail, int page, int size) {
+    public Page<Message> getMessageHistory(String channelType, Long channelId, String userEmail, int page, int size) {
         log.info("User {} requesting message history for {} channel {}", userEmail, channelType, channelId);
         
         // Verify user has access to this channel
@@ -63,7 +63,7 @@ public class ChatService {
      * @param userEmail Email of the user
      * @return List of recent messages (up to 50)
      */
-    public List<Message> getRecentMessages(String channelType, String channelId, String userEmail) {
+    public List<Message> getRecentMessages(String channelType, Long channelId, String userEmail) {
         log.info("User {} joining {} channel {}", userEmail, channelType, channelId);
         
         // Verify user has access to this channel
@@ -83,7 +83,7 @@ public class ChatService {
      * @param text Message text
      * @return Saved message
      */
-    public Message saveMessage(String channelType, String channelId, String senderEmail, String text) {
+    public Message saveMessage(String channelType, Long channelId, String senderEmail, String text) {
         log.info("User {} sending message to {} channel {}", senderEmail, channelType, channelId);
         
         // Verify user has access to this channel
@@ -97,9 +97,8 @@ public class ChatService {
         Message message = Message.builder()
                 .channelType(channelType)
                 .channelId(channelId)
-                .senderId(senderEmail)
-                .senderName(sender.getName())
-                .text(text)
+                .senderId(sender.getId())
+                .content(text)
                 .createdAt(LocalDateTime.now())
                 .build();
         
@@ -113,11 +112,11 @@ public class ChatService {
      * @param userEmail Email of the user
      * @throws IllegalArgumentException if user doesn't have access
      */
-    private void verifyChannelAccess(String channelType, String channelId, String userEmail) {
+    private void verifyChannelAccess(String channelType, Long channelId, String userEmail) {
         // Get user ID from email
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        String userId = user.getId();
+        Long userId = user.getId();
         
         if ("team".equals(channelType)) {
             // Check if user is a team member (by email)
@@ -136,7 +135,7 @@ public class ChatService {
                     log.warn("Task not found for chat: {}", channelId);
                     throw new IllegalArgumentException("Task not found");
                 }
-                String projectId = taskOpt.get().getProjectId();
+                Long projectId = taskOpt.get().getProjectId();
                 if (!permissionService.isProjectMember(projectId, userId)) {
                     log.warn("User {} denied access to task channel {}", userEmail, channelId);
                     throw new IllegalArgumentException("User does not have access to this task");
