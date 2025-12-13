@@ -47,7 +47,7 @@ public class CommentController {
      */
     @PostMapping("/{id}/comments")
     public ResponseEntity<?> addComment(
-            @PathVariable String id,
+            @PathVariable Long id,
             @Valid @RequestBody AddCommentRequest request,
             Authentication authentication) {
         
@@ -139,12 +139,12 @@ public class CommentController {
      */
     private CommentResponse mapToResponse(Comment comment) {
         return CommentResponse.builder()
-                .id(comment.getId())
-                .taskId(comment.getTaskId())
-                .authorId(comment.getAuthorId())
-                .text(comment.getText())
+                .id(String.valueOf(comment.getId()))
+                .taskId(String.valueOf(comment.getTaskId()))
+                .authorId(String.valueOf(comment.getUserId()))
+                .text(comment.getContent())
                 .createdAt(comment.getCreatedAt())
-                .parentId(comment.getParentId())
+                .parentId(comment.getParentId() != null ? String.valueOf(comment.getParentId()) : null)
                 .build();
     }
 }

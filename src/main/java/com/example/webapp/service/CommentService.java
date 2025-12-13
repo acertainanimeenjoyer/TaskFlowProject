@@ -33,7 +33,7 @@ public class CommentService {
     /**
      * Add a comment to a task (with project membership check)
      */
-    public Comment addComment(String taskId, String userId, AddCommentRequest request) {
+    public Comment addComment(Long taskId, Long userId, AddCommentRequest request) {
         log.info("User {} adding comment to task {}", userId, taskId);
         
         // Verify task exists
@@ -45,17 +45,23 @@ public class CommentService {
             throw new IllegalArgumentException("You must be a project member to comment on tasks");
         }
         
-        // If parentId is provided, verify parent comment exists
+        // Parse parentId if provided
+        Long parentId = null;
         if (request.getParentId() != null && !request.getParentId().isEmpty()) {
-            commentRepository.findById(request.getParentId())
-                    .orElseThrow(() -> new IllegalArgumentException("Parent comment not found"));
+            try {
+                parentId = Long.parseLong(request.getParentId());
+                commentRepository.findById(parentId)
+                        .orElseThrow(() -> new IllegalArgumentException("Parent comment not found"));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid parent ID format");
+            }
         }
         
         Comment comment = Comment.builder()
                 .taskId(taskId)
-                .authorId(userId)
-                .text(request.getText())
-                .parentId(request.getParentId())
+                .userId(userId)
+                .content(request.getText())
+                .parentId(parentId)
                 .createdAt(LocalDateTime.now())
                 .build();
         
@@ -71,7 +77,7 @@ public class CommentService {
      * @param limit Maximum number of comments to return
      * @param before Timestamp for cursor-based pagination (optional)
      */
-    public List<Comment> listComments(String taskId, int limit, LocalDateTime before) {
+    public List<Comment> listComments(Long taskId, int limit, LocalDateTime before) {
         log.info("Fetching comments for task: {}", taskId);
         
         // Verify task exists
@@ -81,7 +87,7 @@ public class CommentService {
         if (before != null) {
             // Cursor-based pagination
             PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
-            return commentRepository.findByTaskIdAndCreatedAtBefore(taskId, before, pageRequest);
+            return commentRepository.findByTaskId(taskId, pageRequest).getContent();
         } else {
             // Get latest comments
             PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -92,7 +98,7 @@ public class CommentService {
     /**
      * Get all comments for a task (no pagination)
      */
-    public List<Comment> getAllComments(String taskId) {
+    public List<Comment> getAllComments(Long taskId) {
         log.info("Fetching all comments for task: {}", taskId);
         return commentRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
     }
@@ -100,7 +106,7 @@ public class CommentService {
     /**
      * Get replies to a specific comment
      */
-    public List<Comment> getReplies(String commentId) {
+    public List<Comment> getReplies(Long commentId) {
         log.info("Fetching replies for comment: {}", commentId);
         return commentRepository.findByParentIdOrderByCreatedAtAsc(commentId);
     }
@@ -108,7 +114,7 @@ public class CommentService {
     /**
      * Count comments for a task
      */
-    public long countComments(String taskId) {
+    public long countComments(Long taskId) {
         return commentRepository.countByTaskId(taskId);
     }
 }
