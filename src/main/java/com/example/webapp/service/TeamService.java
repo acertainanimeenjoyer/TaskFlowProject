@@ -6,15 +6,11 @@ import com.example.webapp.repository.TeamRepository;
 import com.example.webapp.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Optional;
 
 /**
@@ -32,29 +28,26 @@ public class TeamService {
     @Autowired
     private UserRepository userRepository;
     
-    @Autowired
-    private MongoTemplate mongoTemplate;
-    
     /**
      * Create a new team with the given manager
      */
-    public Team createTeam(String managerEmail, String name) {
-        log.info("Creating team '{}' with manager: {}", name, managerEmail);
+    public Team createTeam(Long managerId, String name) {
+        log.info("Creating team '{}' with manager ID: {}", name, managerId);
         
         // Verify manager exists
-        User manager = userRepository.findByEmail(managerEmail)
+        User manager = userRepository.findById(managerId)
                 .orElseThrow(() -> new IllegalArgumentException("Manager user not found"));
         
         Team team = Team.builder()
                 .name(name)
-                .managerEmail(managerEmail)
-                .memberIds(new ArrayList<>())
-                .inviteEmails(new ArrayList<>())
+                .managerId(managerId)
+                .members(new HashSet<>())
+                .leaders(new HashSet<>())
                 .createdAt(LocalDateTime.now())
                 .build();
         
         // Add manager as first member
-        team.getMemberIds().add(manager.getId());
+        team.getMembers().add(manager);
         
         Team savedTeam = teamRepository.save(team);
         log.info("Team created with ID: {}", savedTeam.getId());
@@ -63,41 +56,38 @@ public class TeamService {
     }
     
     /**
-     * Invite a user to the team by email (manager only)
+     * Add a user to the team (manager only)
      */
-    public Team inviteEmail(String teamId, String managerEmail, String inviteEmail) {
-        log.info("Manager {} inviting {} to team {}", managerEmail, inviteEmail, teamId);
+    public Team addTeamMember(Long teamId, Long managerId, Long userId) {
+        log.info("Manager {} adding user {} to team {}", managerId, userId, teamId);
         
         // Verify team exists and user is manager
-        Team team = teamRepository.findByIdAndManagerEmail(teamId, managerEmail)
+        Team team = teamRepository.findByIdAndManagerId(teamId, managerId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found or you are not the manager"));
         
-        // Check if already invited
-        if (team.getInviteEmails().contains(inviteEmail)) {
-            throw new IllegalArgumentException("User already invited");
-        }
+        // Get user
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
         // Check if already a member
-        Optional<User> existingUser = userRepository.findByEmail(inviteEmail);
-        if (existingUser.isPresent() && team.getMemberIds().contains(existingUser.get().getId())) {
+        if (team.getMembers().contains(user)) {
             throw new IllegalArgumentException("User is already a member");
         }
         
-        // Add to invite list
-        team.getInviteEmails().add(inviteEmail);
+        // Add user to members
+        team.getMembers().add(user);
         Team savedTeam = teamRepository.save(team);
         
-        log.info("Email {} added to invite list for team {}", inviteEmail, teamId);
+        log.info("User {} added to team {}", userId, teamId);
         return savedTeam;
     }
     
     /**
-     * Join a team (user must be invited or manager allows)
-     * Uses atomic operation to prevent race conditions
+     * Join a team
      */
     @Transactional
-    public Team joinTeam(String teamId, String userId, String userEmail) {
-        log.info("User {} attempting to join team {}", userEmail, teamId);
+    public Team joinTeam(Long teamId, Long userId) {
+        log.info("User {} attempting to join team {}", userId, teamId);
         
         // Verify team exists
         Team team = teamRepository.findById(teamId)

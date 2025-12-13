@@ -1,22 +1,21 @@
 package com.example.webapp.service;
 
 import com.example.webapp.entity.Task;
+import com.example.webapp.repository.TaskRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import jakarta.persistence.criteria.Predicate;
 
 /**
- * Service for dynamic task filtering with MongoDB queries
+ * Service for dynamic task filtering with JPA Criteria API
  * Builds efficient queries based on provided filter criteria
  */
 @Service
@@ -24,13 +23,13 @@ import java.util.List;
 public class TaskFilterService {
     
     @Autowired
-    private MongoTemplate mongoTemplate;
+    private TaskRepository taskRepository;
     
     /**
      * Filter tasks with multiple criteria
      * 
      * @param projectId Required - project ID
-     * @param status Optional - task status (TODO, IN_PROGRESS, IN_REVIEW, DONE, BLOCKED)
+     * @param status Optional - task status (TODO, IN_PROGRESS, DONE, BLOCKED)
      * @param assigneeId Optional - user ID assigned to task
      * @param tagId Optional - tag ID associated with task
      * @param priority Optional - task priority (LOW, MEDIUM, HIGH, URGENT)
@@ -40,10 +39,10 @@ public class TaskFilterService {
      * @return Page of filtered tasks
      */
     public Page<Task> filterTasks(
-            String projectId,
+            Long projectId,
             String status,
-            String assigneeId,
-            String tagId,
+            Long assigneeId,
+            Long tagId,
             String priority,
             LocalDateTime dueDateStart,
             LocalDateTime dueDateEnd,
@@ -52,85 +51,67 @@ public class TaskFilterService {
         log.info("Filtering tasks - projectId: {}, status: {}, assignee: {}, tag: {}, priority: {}, dueDate: [{}, {}]",
                 projectId, status, assigneeId, tagId, priority, dueDateStart, dueDateEnd);
         
-        // Build dynamic query
-        Query query = buildFilterQuery(projectId, status, assigneeId, tagId, priority, dueDateStart, dueDateEnd);
+        // Build dynamic specification
+        Specification<Task> specification = buildFilterSpecification(
+                projectId, status, assigneeId, tagId, priority, dueDateStart, dueDateEnd);
         
-        // Get total count
-        long total = mongoTemplate.count(query, Task.class);
+        // Execute query with pagination
+        Page<Task> result = taskRepository.findAll(specification, pageable);
         
-        // Apply pagination
-        query.with(pageable);
+        log.info("Filter returned {} tasks (total: {})", result.getNumberOfElements(), result.getTotalElements());
         
-        // Execute query
-        List<Task> tasks = mongoTemplate.find(query, Task.class);
-        
-        log.info("Filter returned {} tasks (total: {})", tasks.size(), total);
-        
-        return new PageImpl<>(tasks, pageable, total);
+        return result;
     }
     
     /**
-     * Build MongoDB query with dynamic criteria
+     * Build JPA Specification with dynamic criteria
      */
-    private Query buildFilterQuery(
-            String projectId,
+    private Specification<Task> buildFilterSpecification(
+            Long projectId,
             String status,
-            String assigneeId,
-            String tagId,
+            Long assigneeId,
+            Long tagId,
             String priority,
             LocalDateTime dueDateStart,
             LocalDateTime dueDateEnd) {
         
-        Query query = new Query();
-        List<Criteria> criteria = new ArrayList<>();
-        
-        // Required: Project ID
-        criteria.add(Criteria.where("projectId").is(projectId));
-        
-        // Optional: Status filter
-        if (status != null && !status.isEmpty()) {
-            criteria.add(Criteria.where("status").is(status));
-        }
-        
-        // Optional: Assignee filter (check if assigneeId is in assigneeIds array)
-        if (assigneeId != null && !assigneeId.isEmpty()) {
-            criteria.add(Criteria.where("assigneeIds").is(assigneeId));
-        }
-        
-        // Optional: Tag filter (check if tagId is in tagIds array)
-        if (tagId != null && !tagId.isEmpty()) {
-            criteria.add(Criteria.where("tagIds").is(tagId));
-        }
-        
-        // Optional: Priority filter
-        if (priority != null && !priority.isEmpty()) {
-            criteria.add(Criteria.where("priority").is(priority));
-        }
-        
-        // Optional: Due date range filter
-        if (dueDateStart != null || dueDateEnd != null) {
-            Criteria dueDateCriteria = Criteria.where("dueDate");
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
             
-            if (dueDateStart != null && dueDateEnd != null) {
-                // Both start and end provided
-                dueDateCriteria.gte(dueDateStart).lte(dueDateEnd);
-            } else if (dueDateStart != null) {
-                // Only start provided (after this date)
-                dueDateCriteria.gte(dueDateStart);
-            } else {
-                // Only end provided (before this date)
-                dueDateCriteria.lte(dueDateEnd);
+            // Required: Project ID
+            predicates.add(cb.equal(root.get("projectId"), projectId));
+            
+            // Optional: Status filter
+            if (status != null && !status.isEmpty()) {
+                predicates.add(cb.equal(root.get("status"), status));
             }
             
-            criteria.add(dueDateCriteria);
-        }
-        
-        // Combine all criteria with AND
-        if (!criteria.isEmpty()) {
-            query.addCriteria(new Criteria().andOperator(criteria.toArray(new Criteria[0])));
-        }
-        
-        return query;
+            // Optional: Assignee filter
+            if (assigneeId != null) {
+                predicates.add(cb.isMember(assigneeId, root.get("assignees")));
+            }
+            
+            // Optional: Tag filter
+            if (tagId != null) {
+                predicates.add(cb.isMember(tagId, root.get("tags")));
+            }
+            
+            // Optional: Priority filter
+            if (priority != null && !priority.isEmpty()) {
+                predicates.add(cb.equal(root.get("priority"), priority));
+            }
+            
+            // Optional: Due date range filter
+            if (dueDateStart != null && dueDateEnd != null) {
+                predicates.add(cb.between(root.get("dueDate"), dueDateStart, dueDateEnd));
+            } else if (dueDateStart != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("dueDate"), dueDateStart));
+            } else if (dueDateEnd != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("dueDate"), dueDateEnd));
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
     
     /**
@@ -138,41 +119,31 @@ public class TaskFilterService {
      * 
      * @param projectId Required - project ID
      * @param searchText Search text for title or description
-     * @param assigneeId Optional - filter by assignee
      * @param pageable Pagination parameters
      * @return Page of matching tasks
      */
-    public Page<Task> searchTasks(String projectId, String searchText, String assigneeId, Pageable pageable) {
-        log.info("Searching tasks in project {} for text: {}, assignee: {}", projectId, searchText, assigneeId);
+    public Page<Task> searchTasks(Long projectId, String searchText, Pageable pageable) {
+        log.info("Searching tasks in project {} for text: {}", projectId, searchText);
         
-        Query query = new Query();
+        Specification<Task> specification = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("projectId"), projectId));
+            
+            if (searchText != null && !searchText.isEmpty()) {
+                String pattern = "%" + searchText.toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), pattern),
+                        cb.like(cb.lower(root.get("description")), pattern)
+                ));
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
         
-        List<Criteria> criteriaList = new ArrayList<>();
-        criteriaList.add(Criteria.where("projectId").is(projectId));
-        criteriaList.add(new Criteria().orOperator(
-                Criteria.where("title").regex(searchText, "i"),
-                Criteria.where("description").regex(searchText, "i")
-        ));
+        Page<Task> result = taskRepository.findAll(specification, pageable);
+        log.info("Search returned {} tasks (total: {})", result.getNumberOfElements(), result.getTotalElements());
         
-        // Add assignee filter if provided
-        if (assigneeId != null && !assigneeId.isEmpty()) {
-            criteriaList.add(Criteria.where("assigneeIds").is(assigneeId));
-        }
-        
-        query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
-        
-        // Get total count
-        long total = mongoTemplate.count(query, Task.class);
-        
-        // Apply pagination
-        query.with(pageable);
-        
-        // Execute query
-        List<Task> tasks = mongoTemplate.find(query, Task.class);
-        
-        log.info("Search returned {} tasks (total: {})", tasks.size(), total);
-        
-        return new PageImpl<>(tasks, pageable, total);
+        return result;
     }
     
     /**
@@ -180,41 +151,25 @@ public class TaskFilterService {
      * 
      * @param projectId Required - project ID
      * @param now Current timestamp
-     * @param assigneeId Optional - filter by assignee
      * @param pageable Pagination parameters
      * @return Page of overdue tasks
      */
-    public Page<Task> getOverdueTasks(String projectId, LocalDateTime now, String assigneeId, Pageable pageable) {
-        log.info("Getting overdue tasks for project {} at {}, assignee: {}", projectId, now, assigneeId);
+    public Page<Task> getOverdueTasks(Long projectId, LocalDateTime now, Pageable pageable) {
+        log.info("Getting overdue tasks for project {} at {}", projectId, now);
         
-        Query query = new Query();
+        Specification<Task> specification = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("projectId"), projectId));
+            predicates.add(cb.lessThan(root.get("dueDate"), now));
+            predicates.add(cb.notEqual(root.get("status"), "DONE"));
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
         
-        List<Criteria> criteriaList = new ArrayList<>();
-        criteriaList.add(Criteria.where("projectId").is(projectId));
-        criteriaList.add(Criteria.where("dueDate").lt(now));
-        criteriaList.add(Criteria.where("status").ne("DONE"));
+        Page<Task> result = taskRepository.findAll(specification, pageable);
+        log.info("Found {} overdue tasks (total: {})", result.getNumberOfElements(), result.getTotalElements());
         
-        // Add assignee filter if provided
-        if (assigneeId != null && !assigneeId.isEmpty()) {
-            criteriaList.add(Criteria.where("assigneeIds").is(assigneeId));
-        }
-        
-        Criteria criteria = new Criteria().andOperator(criteriaList.toArray(new Criteria[0]));
-        
-        query.addCriteria(criteria);
-        
-        // Get total count
-        long total = mongoTemplate.count(query, Task.class);
-        
-        // Apply pagination
-        query.with(pageable);
-        
-        // Execute query
-        List<Task> tasks = mongoTemplate.find(query, Task.class);
-        
-        log.info("Found {} overdue tasks (total: {})", tasks.size(), total);
-        
-        return new PageImpl<>(tasks, pageable, total);
+        return result;
     }
     
     /**
@@ -223,37 +178,20 @@ public class TaskFilterService {
      * @param projectId Project ID
      * @return Task statistics
      */
-    public TaskStatistics getTaskStatistics(String projectId) {
+    public TaskStatistics getTaskStatistics(Long projectId) {
         log.info("Getting task statistics for project {}", projectId);
         
-        Query projectQuery = new Query(Criteria.where("projectId").is(projectId));
+        long todo = taskRepository.countByProjectIdAndStatus(projectId, "TODO");
+        long inProgress = taskRepository.countByProjectIdAndStatus(projectId, "IN_PROGRESS");
+        long done = taskRepository.countByProjectIdAndStatus(projectId, "DONE");
+        long blocked = taskRepository.countByProjectIdAndStatus(projectId, "BLOCKED");
         
-        long total = mongoTemplate.count(projectQuery, Task.class);
-        long todo = mongoTemplate.count(
-                new Query(Criteria.where("projectId").is(projectId).and("status").is("TODO")), 
-                Task.class);
-        long inProgress = mongoTemplate.count(
-                new Query(Criteria.where("projectId").is(projectId).and("status").is("IN_PROGRESS")), 
-                Task.class);
-        long inReview = mongoTemplate.count(
-                new Query(Criteria.where("projectId").is(projectId).and("status").is("IN_REVIEW")), 
-                Task.class);
-        long done = mongoTemplate.count(
-                new Query(Criteria.where("projectId").is(projectId).and("status").is("DONE")), 
-                Task.class);
-        long blocked = mongoTemplate.count(
-                new Query(Criteria.where("projectId").is(projectId).and("status").is("BLOCKED")), 
-                Task.class);
+        // Calculate total by summing up status counts
+        long total = todo + inProgress + done + blocked;
         
-        long overdue = mongoTemplate.count(
-                new Query(new Criteria().andOperator(
-                        Criteria.where("projectId").is(projectId),
-                        Criteria.where("dueDate").lt(LocalDateTime.now()),
-                        Criteria.where("status").ne("DONE")
-                )),
-                Task.class);
+        long overdue = taskRepository.findOverdueTasks(projectId, LocalDateTime.now()).size();
         
-        return new TaskStatistics(total, todo, inProgress, inReview, done, blocked, overdue);
+        return new TaskStatistics(total, todo, inProgress, 0, done, blocked, overdue);
     }
     
     /**

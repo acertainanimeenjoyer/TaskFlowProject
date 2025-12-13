@@ -1,94 +1,98 @@
 package com.example.webapp.service;
 
-import com.mongodb.client.gridfs.model.GridFSFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.mongodb.gridfs.GridFsOperations;
-import org.springframework.data.mongodb.gridfs.GridFsTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 
 /**
- * Service for storing and retrieving files using MongoDB GridFS
+ * Service for storing and retrieving files on the filesystem
+ * Replaces MongoDB GridFS for PostgreSQL compatibility
  */
 @Service
 @Slf4j
 public class GridFsStorageService {
 
-    @Autowired
-    private GridFsTemplate gridFsTemplate;
-
-    @Autowired
-    private GridFsOperations gridFsOperations;
+    @Value("${app.file.upload-dir:uploads}")
+    private String uploadDir;
 
     /**
-     * Store a file in GridFS
+     * Store a file on the filesystem
      * @param file the multipart file to store
      * @param filename the name to store the file as
-     * @return the GridFS file ID
+     * @return the file ID
      */
     public String storeFile(MultipartFile file, String filename) throws IOException {
-        try (InputStream inputStream = file.getInputStream()) {
-            String fileId = gridFsTemplate.store(
-                    inputStream,
-                    filename,
-                    file.getContentType()
-            ).toString();
-            log.info("File stored in GridFS: {} with ID: {}", filename, fileId);
-            return fileId;
+        // Create upload directory if it doesn't exist
+        File uploadDirectory = new File(uploadDir);
+        if (!uploadDirectory.exists()) {
+            uploadDirectory.mkdirs();
         }
+        
+        // Generate unique file ID
+        String fileId = UUID.randomUUID().toString();
+        Path filePath = Paths.get(uploadDir, fileId);
+        
+        // Save file
+        Files.write(filePath, file.getBytes());
+        log.info("File stored: {} with ID: {}", filename, fileId);
+        return fileId;
     }
 
     /**
-     * Delete a file from GridFS by ID
-     * @param fileId the GridFS file ID
+     * Delete a file by ID
+     * @param fileId the file ID
      */
     public void deleteFile(String fileId) {
         if (fileId != null && !fileId.isEmpty()) {
             try {
-                gridFsTemplate.delete(new org.springframework.data.mongodb.core.query.Query(
-                        org.springframework.data.mongodb.core.query.Criteria.where("_id").is(
-                                new org.bson.types.ObjectId(fileId)
-                        )
-                ));
-                log.info("File deleted from GridFS: {}", fileId);
-            } catch (Exception e) {
-                log.warn("Failed to delete file from GridFS: {}", fileId, e);
+                Path filePath = Paths.get(uploadDir, fileId);
+                Files.deleteIfExists(filePath);
+                log.info("File deleted: {}", fileId);
+            } catch (IOException e) {
+                log.warn("Failed to delete file: {}", fileId, e);
             }
         }
     }
 
     /**
-     * Get a file from GridFS by ID
-     * @param fileId the GridFS file ID
-     * @return the GridFSFile or null if not found
+     * Check if a file exists
+     * @param fileId the file ID
+     * @return true if file exists, false otherwise
      */
-    public GridFSFile getFile(String fileId) {
+    public boolean fileExists(String fileId) {
+        if (fileId == null || fileId.isEmpty()) {
+            return false;
+        }
         try {
-            return gridFsTemplate.findOne(new org.springframework.data.mongodb.core.query.Query(
-                    org.springframework.data.mongodb.core.query.Criteria.where("_id").is(
-                            new org.bson.types.ObjectId(fileId)
-                    )
-            ));
+            Path filePath = Paths.get(uploadDir, fileId);
+            return Files.exists(filePath);
         } catch (Exception e) {
-            log.warn("Failed to retrieve file from GridFS: {}", fileId, e);
-            return null;
+            log.warn("Failed to check file existence: {}", fileId, e);
+            return false;
         }
     }
 
     /**
-     * Download a file from GridFS as InputStream
-     * @param fileId the GridFS file ID
+     * Download a file as InputStream
+     * @param fileId the file ID
      * @return the InputStream of the file
      */
     public InputStream downloadFile(String fileId) throws IOException {
-        GridFSFile file = getFile(fileId);
-        if (file != null) {
-            return gridFsOperations.getResource(file).getInputStream();
+        Path filePath = Paths.get(uploadDir, fileId);
+        if (Files.exists(filePath)) {
+            return new FileInputStream(filePath.toFile());
         }
-        throw new IOException("File not found in GridFS: " + fileId);
+        throw new IOException("File not found: " + fileId);
     }
 }

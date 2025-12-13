@@ -1,56 +1,58 @@
 package com.example.webapp.service;
 
-import com.mongodb.client.gridfs.model.GridFSFile;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.gridfs.GridFsOperations;
-import org.springframework.data.mongodb.gridfs.GridFsTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 
 /**
- * Service for storing and managing files using GridFS
+ * Service for storing and managing files on the filesystem
+ * Replaces GridFS for PostgreSQL compatibility
  */
 @Service
 @Slf4j
 public class StorageService {
     
-    @Autowired
-    private GridFsTemplate gridFsTemplate;
-    
-    @Autowired
-    private GridFsOperations gridFsOperations;
+    @Value("${app.file.upload-dir:uploads}")
+    private String uploadDir;
     
     /**
-     * Store a file in GridFS
+     * Store a file on the filesystem
      * @param file The file to store
      * @param filename The filename to use
-     * @return The GridFS file ID
+     * @return The stored file ID
      */
     public String storeFile(MultipartFile file, String filename) throws IOException {
         log.info("Storing file: {} (size: {} bytes)", filename, file.getSize());
         
-        InputStream inputStream = file.getInputStream();
-        ObjectId fileId = gridFsTemplate.store(
-                inputStream,
-                filename,
-                file.getContentType()
-        );
+        // Create upload directory if it doesn't exist
+        File uploadDirectory = new File(uploadDir);
+        if (!uploadDirectory.exists()) {
+            uploadDirectory.mkdirs();
+        }
         
-        inputStream.close();
-        log.info("File stored with ID: {}", fileId.toString());
-        return fileId.toString();
+        // Generate unique file ID
+        String fileId = UUID.randomUUID().toString();
+        Path filePath = Paths.get(uploadDir, fileId);
+        
+        // Save file
+        Files.write(filePath, file.getBytes());
+        
+        log.info("File stored with ID: {} at {}", fileId, filePath);
+        return fileId;
     }
     
     /**
-     * Delete a file from GridFS by ID
-     * @param fileId The GridFS file ID
+     * Delete a file from filesystem
+     * @param fileId The file ID to delete
      */
     public void deleteFile(String fileId) {
         if (fileId == null || fileId.isEmpty()) {
@@ -60,37 +62,29 @@ public class StorageService {
         
         try {
             log.info("Deleting file with ID: {}", fileId);
-            Query query = new Query(Criteria.where("_id").is(new ObjectId(fileId)));
-            gridFsTemplate.delete(query);
+            Path filePath = Paths.get(uploadDir, fileId);
+            Files.deleteIfExists(filePath);
             log.info("File deleted: {}", fileId);
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid file ID format: {}", fileId);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("Error deleting file: {}", fileId, e);
         }
     }
     
     /**
-     * Get file metadata by ID
-     * @param fileId The GridFS file ID
-     * @return GridFSFile object or null if not found
-     */
-    public GridFSFile getFile(String fileId) {
-        try {
-            Query query = new Query(Criteria.where("_id").is(new ObjectId(fileId)));
-            return gridFsTemplate.findOne(query);
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid file ID format: {}", fileId);
-            return null;
-        }
-    }
-    
-    /**
      * Check if a file exists
-     * @param fileId The GridFS file ID
+     * @param fileId The file ID to check
      * @return true if file exists, false otherwise
      */
     public boolean fileExists(String fileId) {
-        return getFile(fileId) != null;
+        if (fileId == null || fileId.isEmpty()) {
+            return false;
+        }
+        try {
+            Path filePath = Paths.get(uploadDir, fileId);
+            return Files.exists(filePath);
+        } catch (Exception e) {
+            log.warn("Error checking file existence: {}", fileId, e);
+            return false;
+        }
     }
 }
