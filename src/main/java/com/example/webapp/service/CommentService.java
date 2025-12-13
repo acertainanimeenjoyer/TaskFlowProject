@@ -87,7 +87,7 @@ public class CommentService {
         if (before != null) {
             // Cursor-based pagination
             PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
-            return commentRepository.findByTaskId(taskId, pageRequest).getContent();
+            return commentRepository.findByTaskIdAndCreatedAtBefore(taskId, before, pageRequest).getContent();
         } else {
             // Get latest comments
             PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));

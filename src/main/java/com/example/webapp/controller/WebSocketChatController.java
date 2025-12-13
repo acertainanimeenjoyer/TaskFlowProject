@@ -191,7 +191,7 @@ public class WebSocketChatController {
                 .channelType(message.getChannelType())
                     .channelId(message.getChannelId() != null ? String.valueOf(message.getChannelId()) : null)
                     .senderId(message.getSenderId() != null ? String.valueOf(message.getSenderId()) : null)
-                    .senderName(message.getSender() != null ? message.getSender().getEmail() : "Unknown")
+                    .senderName(message.getSender() != null ? message.getSender().getName() : "Unknown")
                     .text(message.getContent())
                 .createdAt(message.getCreatedAt())
                 .build();

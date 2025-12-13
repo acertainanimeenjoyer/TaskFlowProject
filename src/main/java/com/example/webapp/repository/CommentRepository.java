@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * JPA repository for Comment entity
@@ -18,6 +19,11 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
      * Find all comments for a task with pagination
      */
     Page<Comment> findByTaskId(Long taskId, Pageable pageable);
+
+    /**
+     * Find comments before a certain timestamp for cursor pagination
+     */
+    Page<Comment> findByTaskIdAndCreatedAtBefore(Long taskId, LocalDateTime before, Pageable pageable);
     
     /**
      * Find all comments for a task ordered by creation time descending

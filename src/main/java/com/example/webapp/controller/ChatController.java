@@ -56,7 +56,7 @@ public class ChatController {
                     .channelType(msg.getChannelType())
                     .channelId(msg.getChannelId() != null ? String.valueOf(msg.getChannelId()) : null)
                     .senderId(msg.getSenderId() != null ? String.valueOf(msg.getSenderId()) : null)
-                    .senderName(msg.getSender() != null ? msg.getSender().getEmail() : "Unknown")
+                    .senderName(msg.getSender() != null ? msg.getSender().getName() : "Unknown")
                     .text(msg.getContent())
                     .createdAt(msg.getCreatedAt())
                     .build());
@@ -98,7 +98,7 @@ public class ChatController {
                     .channelType(message.getChannelType())
                     .channelId(message.getChannelId() != null ? String.valueOf(message.getChannelId()) : null)
                     .senderId(message.getSenderId() != null ? String.valueOf(message.getSenderId()) : null)
-                    .senderName(message.getSender() != null ? message.getSender().getEmail() : "Unknown")
+                    .senderName(message.getSender() != null ? message.getSender().getName() : "Unknown")
                     .text(message.getContent())
                     .createdAt(message.getCreatedAt())
                     .build();
