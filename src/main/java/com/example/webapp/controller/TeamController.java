@@ -52,7 +52,10 @@ public class TeamController {
             String userEmail = authentication.getName();
             log.info("Creating team for user: {}", userEmail);
             
-            Team team = teamService.createTeam(userEmail, request.getName());
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+            
+            Team team = teamService.createTeam(user.getId(), request.getName());
             TeamResponse response = mapToResponse(team);
             
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -123,7 +126,7 @@ public class TeamController {
             User user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
             
-            Team team = teamService.joinTeam(id, user.getId(), userEmail);
+            Team team = teamService.joinTeam(id, user.getId());
             TeamResponse response = mapToResponse(team);
             
             return ResponseEntity.ok(response);
@@ -190,8 +193,10 @@ public class TeamController {
             User user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
             
-            if (!team.getMemberIds().contains(user.getId()) && 
-                !team.getManagerEmail().equals(userEmail)) {
+            boolean isMember = team.getMembers().stream().anyMatch(m -> m.getId().equals(user.getId()));
+            boolean isManager = team.getManagerId().equals(user.getId());
+            
+            if (!isMember && !isManager) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body("You do not have access to this team");
             }
@@ -337,16 +342,26 @@ public class TeamController {
      * Map Team entity to TeamResponse DTO
      */
     private TeamResponse mapToResponse(Team team) {
+        User manager = userRepository.findById(team.getManagerId())
+                .orElse(null);
+        String managerEmail = manager != null ? manager.getEmail() : "Unknown";
+        
+        java.util.List<Long> memberIds = team.getMembers().stream()
+                .map(User::getId)
+                .toList();
+        
+        java.util.List<Long> leaderIds = team.getLeaders().stream()
+                .map(User::getId)
+                .toList();
+        
         return TeamResponse.builder()
                 .id(team.getId())
                 .name(team.getName())
-                .managerEmail(team.getManagerEmail())
-                .memberIds(team.getMemberIds())
-                .leaderIds(team.getLeaderIds() != null ? team.getLeaderIds() : new java.util.ArrayList<>())
-                .inviteEmails(team.getInviteEmails())
+                .managerEmail(managerEmail)
+                .memberIds(memberIds)
+                .leaderIds(leaderIds)
                 .createdAt(team.getCreatedAt())
-                .memberCount(team.getMemberIds().size())
-                .inviteCount(team.getInviteEmails().size())
+                .memberCount(team.getMembers().size())
                 .build();
     }
     
@@ -370,7 +385,10 @@ public class TeamController {
             Team team = teamService.getTeamById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Team not found"));
             
-            if (!team.getMemberIds().contains(user.getId())) {
+            boolean isMember = team.getMembers().stream().anyMatch(m -> m.getId().equals(user.getId()));
+            boolean isManager = team.getManagerId().equals(user.getId());
+            
+            if (!isMember && !isManager) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body("You are not a member of this team");
             }
@@ -400,7 +418,7 @@ public class TeamController {
     /**
      * Map Project entity to ProjectResponse DTO
      */
-    private ProjectResponse mapProjectToResponse(Project project, String currentUserId) {
+    private ProjectResponse mapProjectToResponse(Project project, Long currentUserId) {
         boolean canManage = permissionService.canManageTasks(project.getId(), currentUserId);
         
         // Look up owner email
@@ -408,11 +426,13 @@ public class TeamController {
                 .map(User::getEmail)
                 .orElse("Unknown");
         
-        // Look up member emails
-        java.util.List<String> memberEmails = project.getMemberIds().stream()
-                .map(id -> userRepository.findById(id)
-                        .map(User::getEmail)
-                        .orElse("Unknown"))
+        // Get member IDs and emails from Set<User>
+        java.util.List<Long> memberIds = project.getMembers().stream()
+                .map(User::getId)
+                .toList();
+        
+        java.util.List<String> memberEmails = project.getMembers().stream()
+                .map(User::getEmail)
                 .toList();
         
         return ProjectResponse.builder()
@@ -422,10 +442,10 @@ public class TeamController {
                 .ownerId(project.getOwnerId())
                 .ownerEmail(ownerEmail)
                 .teamId(project.getTeamId())
-                .memberIds(project.getMemberIds())
+                .memberIds(memberIds)
                 .memberEmails(memberEmails)
                 .createdAt(project.getCreatedAt())
-                .memberCount(project.getMemberIds().size())
+                .memberCount(project.getMembers().size())
                 .isOwner(project.getOwnerId().equals(currentUserId))
                 .canManageTasks(canManage)
                 .build();
