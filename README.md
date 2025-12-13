@@ -75,7 +75,7 @@ Frontend runs on `http://localhost:5173` and calls the backend using `VITE_API_U
 - Email-based user identification
 - Real-time validation with proper error messages
 - **Advanced Task Filtering** - Multi-criteria search (status, assignee, tag, priority, due date ranges)
-- **Text Search** - Full-text search in task titles and descriptions
+- **Text Search** - Case-insensitive search in task titles and descriptions (API available, UI not yet implemented)
 - **Task Statistics** - Real-time project task metrics
 
 ## 🛠 Technology Stack
