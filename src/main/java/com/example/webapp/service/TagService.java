@@ -43,7 +43,6 @@ public class TagService {
                 .projectId(projectId)
                 .name(request.getName())
                 .color(request.getColor() != null ? request.getColor() : "#808080") // Default gray
-                .createdBy(userId)
                 .build();
         
         try {

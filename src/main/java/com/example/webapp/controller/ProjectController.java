@@ -148,8 +148,13 @@ public class ProjectController {
             
             User user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
-            
-            Project project = projectService.addMember(id, user.getId(), request.getUserId());
+            Long targetUserId;
+            try {
+                targetUserId = Long.parseLong(request.getUserId());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid user ID format");
+            }
+            Project project = projectService.addMember(id, user.getId(), targetUserId);
             ProjectResponse response = mapToResponse(project, user.getId());
             
             return ResponseEntity.ok(response);
@@ -246,23 +251,26 @@ public class ProjectController {
                 .orElse("Unknown");
         
         // Look up member emails
-        List<String> memberEmails = project.getMemberIds().stream()
-                .map(id -> userRepository.findById(id)
-                        .map(User::getEmail)
-                        .orElse("Unknown"))
-                .toList();
+        // Member IDs and emails from members set
+        List<String> memberIds = project.getMembers().stream()
+            .map(User::getId)
+            .map(id -> id != null ? String.valueOf(id) : null)
+            .toList();
+        List<String> memberEmails = project.getMembers().stream()
+            .map(User::getEmail)
+            .toList();
         
         return ProjectResponse.builder()
-                .id(project.getId())
+                .id(project.getId() != null ? String.valueOf(project.getId()) : null)
                 .name(project.getName())
                 .description(project.getDescription())
-                .ownerId(project.getOwnerId())
+                .ownerId(project.getOwnerId() != null ? String.valueOf(project.getOwnerId()) : null)
                 .ownerEmail(ownerEmail)
-                .teamId(project.getTeamId())
-                .memberIds(project.getMemberIds())
+                .teamId(project.getTeamId() != null ? String.valueOf(project.getTeamId()) : null)
+                .memberIds(memberIds)
                 .memberEmails(memberEmails)
                 .createdAt(project.getCreatedAt())
-                .memberCount(project.getMemberIds().size())
+                .memberCount(project.getMembers().size())
                 .isOwner(project.getOwnerId().equals(currentUserId))
                 .canManageTasks(canManage)
                 .build();

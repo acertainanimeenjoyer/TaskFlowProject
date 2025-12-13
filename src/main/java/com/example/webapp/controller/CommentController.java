@@ -90,7 +90,7 @@ public class CommentController {
      */
     @GetMapping("/{id}/comments")
     public ResponseEntity<?> getComments(
-            @PathVariable String id,
+            @PathVariable Long id,
             @RequestParam(defaultValue = "50") int limit,
             @RequestParam(required = false) String before,
             Authentication authentication) {

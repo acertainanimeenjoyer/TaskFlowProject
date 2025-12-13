@@ -100,11 +100,11 @@ public class TagController {
      */
     private TagResponse mapToResponse(Tag tag) {
         return TagResponse.builder()
-                .id(tag.getId() != null ? String.valueOf(tag.getId()) : null)
-                .projectId(tag.getProjectId() != null ? String.valueOf(tag.getProjectId()) : null)
-                .name(tag.getName())
-                .color(tag.getColor())
-                .createdBy(tag.getCreatedBy() != null ? String.valueOf(tag.getCreatedBy()) : null)
-                .build();
+            .id(tag.getId() != null ? String.valueOf(tag.getId()) : null)
+            .projectId(tag.getProjectId() != null ? String.valueOf(tag.getProjectId()) : null)
+            .name(tag.getName())
+            .color(tag.getColor())
+            .createdBy(null)
+            .build();
     }
 }

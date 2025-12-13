@@ -346,12 +346,14 @@ public class TeamController {
                 .orElse(null);
         String managerEmail = manager != null ? manager.getEmail() : "Unknown";
         
-        java.util.List<Long> memberIds = team.getMembers().stream()
+        java.util.List<String> memberIds = team.getMembers().stream()
                 .map(User::getId)
+                .map(id -> id != null ? String.valueOf(id) : null)
                 .toList();
         
-        java.util.List<Long> leaderIds = team.getLeaders().stream()
+        java.util.List<String> leaderIds = team.getLeaders().stream()
                 .map(User::getId)
+                .map(id -> id != null ? String.valueOf(id) : null)
                 .toList();
         
         return TeamResponse.builder()
@@ -427,9 +429,10 @@ public class TeamController {
                 .orElse("Unknown");
         
         // Get member IDs and emails from Set<User>
-        java.util.List<Long> memberIds = project.getMembers().stream()
-                .map(User::getId)
-                .toList();
+        java.util.List<String> memberIds = project.getMembers().stream()
+            .map(User::getId)
+            .map(id -> id != null ? String.valueOf(id) : null)
+            .toList();
         
         java.util.List<String> memberEmails = project.getMembers().stream()
                 .map(User::getEmail)
