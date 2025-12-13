@@ -100,7 +100,7 @@ public class ProjectController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<?> getProject(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -138,7 +138,7 @@ public class ProjectController {
      */
     @PostMapping("/{id}/members")
     public ResponseEntity<?> addMember(
-            @PathVariable String id,
+            @PathVariable Long id,
             @Valid @RequestBody AddMemberRequest request,
             Authentication authentication) {
         
@@ -170,8 +170,8 @@ public class ProjectController {
      */
     @DeleteMapping("/{id}/members/{userId}")
     public ResponseEntity<?> removeMember(
-            @PathVariable String id,
-            @PathVariable String userId,
+            @PathVariable Long id,
+            @PathVariable Long userId,
             Authentication authentication) {
         
         try {
@@ -202,7 +202,7 @@ public class ProjectController {
      */
     @GetMapping("/{id}/available-members")
     public ResponseEntity<?> getAvailableMembers(
-            @PathVariable String id,
+            @PathVariable Long id,
             Authentication authentication) {
         
         try {
@@ -217,7 +217,7 @@ public class ProjectController {
             // Map to simple response (don't expose password hashes etc.)
             List<java.util.Map<String, String>> response = availableMembers.stream()
                     .map(u -> java.util.Map.of(
-                            "id", u.getId(),
+                            "id", u.getId() != null ? String.valueOf(u.getId()) : "",
                             "email", u.getEmail()
                     ))
                     .toList();
@@ -237,7 +237,7 @@ public class ProjectController {
     /**
      * Map Project entity to ProjectResponse DTO
      */
-    private ProjectResponse mapToResponse(Project project, String currentUserId) {
+    private ProjectResponse mapToResponse(Project project, Long currentUserId) {
         boolean canManage = permissionService.canManageTasks(project.getId(), currentUserId);
         
         // Look up owner email

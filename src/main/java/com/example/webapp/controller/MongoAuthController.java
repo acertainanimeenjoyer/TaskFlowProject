@@ -82,7 +82,10 @@ public class MongoAuthController {
         userProfileRepository.save(profile);
         log.info("UserProfile created for email: {}", savedUser.getEmail());
 
-        MongoUserResponse response = new MongoUserResponse(savedUser.getId(), savedUser.getName(), savedUser.getEmail());
+    MongoUserResponse response = new MongoUserResponse(
+        savedUser.getId() != null ? String.valueOf(savedUser.getId()) : null, 
+        savedUser.getName(), 
+        savedUser.getEmail());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -120,7 +123,7 @@ public class MongoAuthController {
 
         return ResponseEntity.ok(MongoAuthResponse.builder()
                 .token(token)
-                .userId(user.getId())
+                .userId(user.getId() != null ? String.valueOf(user.getId()) : null)
                 .email(user.getEmail())
                 .name(user.getName())
                 .build());

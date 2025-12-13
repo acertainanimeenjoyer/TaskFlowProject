@@ -36,7 +36,7 @@ public class TagController {
      */
     @PostMapping("/{projectId}/tags")
     public ResponseEntity<?> createTag(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             @Valid @RequestBody CreateTagRequest request,
             Authentication authentication) {
         
@@ -68,7 +68,7 @@ public class TagController {
      */
     @GetMapping("/{projectId}/tags")
     public ResponseEntity<?> listTags(
-            @PathVariable String projectId,
+            @PathVariable Long projectId,
             Authentication authentication) {
         
         try {
@@ -100,11 +100,11 @@ public class TagController {
      */
     private TagResponse mapToResponse(Tag tag) {
         return TagResponse.builder()
-                .id(tag.getId())
-                .projectId(tag.getProjectId())
+                .id(tag.getId() != null ? String.valueOf(tag.getId()) : null)
+                .projectId(tag.getProjectId() != null ? String.valueOf(tag.getProjectId()) : null)
                 .name(tag.getName())
                 .color(tag.getColor())
-                .createdBy(tag.getCreatedBy())
+                .createdBy(tag.getCreatedBy() != null ? String.valueOf(tag.getCreatedBy()) : null)
                 .build();
     }
 }

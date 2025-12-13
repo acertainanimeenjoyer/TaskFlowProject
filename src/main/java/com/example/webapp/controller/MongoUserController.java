@@ -61,7 +61,10 @@ public class MongoUserController {
 
         log.info("Fetched current user: {}", email);
 
-        MongoUserResponse response = new MongoUserResponse(user.getId(), user.getName(), user.getEmail());
+    MongoUserResponse response = new MongoUserResponse(
+        user.getId() != null ? String.valueOf(user.getId()) : null, 
+        user.getName(), 
+        user.getEmail());
         return ResponseEntity.ok(response);
     }
 
@@ -89,7 +92,10 @@ public class MongoUserController {
 
         log.info("Updated user profile: {}", email);
 
-        MongoUserResponse response = new MongoUserResponse(user.getId(), user.getName(), user.getEmail());
+    MongoUserResponse response = new MongoUserResponse(
+        user.getId() != null ? String.valueOf(user.getId()) : null, 
+        user.getName(), 
+        user.getEmail());
         return ResponseEntity.ok(response);
     }
 
@@ -102,7 +108,10 @@ public class MongoUserController {
         log.info("Fetching all users");
         
         List<MongoUserResponse> users = userRepository.findAll().stream()
-                .map(user -> new MongoUserResponse(user.getId(), user.getName(), user.getEmail()))
+                .map(user -> new MongoUserResponse(
+                    user.getId() != null ? String.valueOf(user.getId()) : null, 
+                    user.getName(), 
+                    user.getEmail()))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(users);
@@ -116,11 +125,20 @@ public class MongoUserController {
     public ResponseEntity<MongoUserResponse> getUserById(@PathVariable String id) {
         log.info("Fetching user by id: {}", id);
 
-        User user = userRepository.findById(id)
+        try {
+            Long userId = Long.parseLong(id);
+            User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
 
-        MongoUserResponse response = new MongoUserResponse(user.getId(), user.getName(), user.getEmail());
-        return ResponseEntity.ok(response);
+            MongoUserResponse response = new MongoUserResponse(
+                    user.getId() != null ? String.valueOf(user.getId()) : null, 
+                    user.getName(), 
+                    user.getEmail());
+            return ResponseEntity.ok(response);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid user ID format: {}", id);
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     /**
