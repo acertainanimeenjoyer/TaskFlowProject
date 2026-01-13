@@ -10,7 +10,7 @@ export interface User {
 }
 
 interface BackendUserResponse {
-  id: string;
+  id: string | number;
   email: string;
   name: string;
 }
@@ -19,7 +19,7 @@ function mapBackendUser(data: BackendUserResponse): User {
   const name = data.name || '';
   const nameParts = name.split(' ');
   return {
-    id: data.id,
+    id: String(data.id),
     email: data.email,
     name: data.name,
     firstName: nameParts[0] || '',
@@ -54,5 +54,9 @@ export const userService = {
 
   deleteAvatar: async (): Promise<void> => {
     await api.delete('/users/me/avatar');
+  },
+  existsByEmail: async (email: string): Promise<boolean> => {
+    const resp = await api.get(`/users/exists`, { params: { email } });
+    return resp.data?.exists === true;
   },
 };

@@ -16,13 +16,13 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.Arrays;
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -37,8 +37,9 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    @Value("${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://localhost:3000}")
-    private String corsAllowedOrigins;
+        // Allow the common local dev ports by default; override with CORS_ALLOWED_ORIGINS env var
+        @Value("${CORS_ALLOWED_ORIGINS:http://localhost:4173,http://localhost:5173,http://localhost:5174,http://localhost:3000}")
+        private String corsAllowedOrigins;
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -93,8 +94,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/users/*/avatar").permitAll()
-                        .requestMatchers("/api/users/*/profile-pic").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/users/*/avatar").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/users/*/profile-pic").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated()
                 )

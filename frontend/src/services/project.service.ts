@@ -10,6 +10,7 @@ export interface Project {
   memberIds: string[];
   memberEmails: string[];
   tags?: string[];
+  tagObjects?: Array<{ id: string; name: string; color: string }>;
   createdAt: string;
   updatedAt?: string;
   memberCount?: number;
@@ -37,6 +38,10 @@ export const projectService = {
     return response.data;
   },
 
+  deleteProject: async (projectId: string): Promise<void> => {
+    await api.delete(`/projects/${projectId}`);
+  },
+
   updateProject: async (
     projectId: string,
     data: Partial<Project>
@@ -44,11 +49,6 @@ export const projectService = {
     const response = await api.put(`/projects/${projectId}`, data);
     return response.data;
   },
-
-  deleteProject: async (projectId: string): Promise<void> => {
-    await api.delete(`/projects/${projectId}`);
-  },
-
   addMember: async (projectId: string, userId: string): Promise<Project> => {
     const response = await api.post(`/projects/${projectId}/members`, { userId });
     return response.data;
@@ -64,14 +64,16 @@ export const projectService = {
     return response.data;
   },
 
-  addTag: async (projectId: string, tag: string): Promise<Project> => {
-    const response = await api.post(`/projects/${projectId}/tags`, { tag });
-    return response.data;
+  getTags: async (projectId: string): Promise<Array<{id: string, name: string, color: string}>> => {
+    const response = await api.get(`/projects/${projectId}/tags`);
+    return response.data.map((tag: any) => ({ id: String(tag.id), name: tag.name, color: tag.color || 'gray' }));
   },
 
-  removeTag: async (projectId: string, tag: string): Promise<Project> => {
+  addTag: async (projectId: string, tag: string): Promise<void> => {
+    await api.post(`/projects/${projectId}/tags`, { name: tag });
+  },
+
+  removeTag: async (projectId: string, tag: string): Promise<void> => {
     await api.delete(`/projects/${projectId}/tags/${encodeURIComponent(tag)}`);
-    const response = await api.get(`/projects/${projectId}`);
-    return response.data;
   },
 };

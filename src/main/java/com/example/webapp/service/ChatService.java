@@ -98,6 +98,7 @@ public class ChatService {
                 .channelType(channelType)
                 .channelId(channelId)
                 .senderId(sender.getId())
+            .sender(sender)
                 .content(text)
                 .createdAt(LocalDateTime.now())
                 .build();

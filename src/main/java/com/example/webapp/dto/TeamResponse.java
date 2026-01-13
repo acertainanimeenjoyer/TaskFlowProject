@@ -20,6 +20,9 @@ public class TeamResponse {
     private String id;
     private String name;
     private String managerEmail;
+    private java.util.List<String> memberEmails;
+    private String code;
+    private int joinMode;
     private List<String> memberIds;
     private List<String> leaderIds;
     private List<String> inviteEmails;

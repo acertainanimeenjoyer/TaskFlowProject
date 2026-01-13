@@ -5,6 +5,7 @@ export interface ChatMessage {
   channelType: 'team' | 'task' | 'project';
   channelId: string;
   senderId: string;
+  senderEmail?: string;
   senderName: string;
   text: string;
   createdAt: string;

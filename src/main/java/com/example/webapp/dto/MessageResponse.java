@@ -20,6 +20,7 @@ public class MessageResponse {
     private String channelType;
     private String channelId;
     private String senderId;
+    private String senderEmail;
     private String senderName;
     private String text;
     private LocalDateTime createdAt;

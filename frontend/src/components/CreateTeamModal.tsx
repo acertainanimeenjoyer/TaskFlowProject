@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
+import { type Team } from '../services/team.service';
 
 interface CreateTeamModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (name: string, inviteEmails: string[]) => Promise<void>;
+  onSubmit: (name: string, inviteEmails: string[]) => Promise<Team>;
 }
 
 export const CreateTeamModal = ({ isOpen, onClose, onSubmit }: CreateTeamModalProps) => {
@@ -12,6 +13,8 @@ export const CreateTeamModal = ({ isOpen, onClose, onSubmit }: CreateTeamModalPr
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // joinMode removed — invites are stored and join behavior enforced server-side
+  const [createdTeam, setCreatedTeam] = useState<Team | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -33,9 +36,9 @@ export const CreateTeamModal = ({ isOpen, onClose, onSubmit }: CreateTeamModalPr
     onClose();
   };
 
-  const handleAddEmail = (e?: React.KeyboardEvent) => {
+  const handleAddEmail = async (e?: React.KeyboardEvent) => {
     if (e && e.key !== 'Enter') return;
-    
+
     const email = currentEmail.trim();
     if (!email) return;
 
@@ -56,7 +59,10 @@ export const CreateTeamModal = ({ isOpen, onClose, onSubmit }: CreateTeamModalPr
       return;
     }
 
-    setInviteEmails([...inviteEmails, email]);
+    // Do not require the invited user to already have an account.
+    // The backend will store the invite email for later joining.
+
+    setInviteEmails(prev => [...prev, email]);
     setCurrentEmail('');
     setError('');
   };
@@ -76,8 +82,10 @@ export const CreateTeamModal = ({ isOpen, onClose, onSubmit }: CreateTeamModalPr
     setError('');
 
     try {
-      await onSubmit(name.trim(), inviteEmails);
-      handleClose();
+      const team = await onSubmit(name.trim(), inviteEmails);
+      // keep modal open and display created team ID
+      setCreatedTeam(team);
+      setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create team');
     } finally {
@@ -165,23 +173,56 @@ export const CreateTeamModal = ({ isOpen, onClose, onSubmit }: CreateTeamModalPr
             </div>
           )}
 
-          <div className="flex space-x-3">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
-            >
-              {isLoading ? 'Creating...' : 'Create Team'}
-            </button>
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
-            >
-              Cancel
-            </button>
-          </div>
+          {/* joinMode removed from UI — server controls join behavior */}
+
+          {!createdTeam ? (
+            <div className="flex space-x-3">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
+              >
+                {isLoading ? 'Creating...' : 'Create Team'}
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 rounded-md text-center">
+                <p className="text-sm text-gray-600">Team created successfully!</p>
+                <p className="mt-2 text-lg font-mono text-2xl">{createdTeam.id}</p>
+                <p className="mt-1 text-xs text-gray-500">Share this Team ID for members to join</p>
+              </div>
+              <p className="text-sm text-gray-600">If you invited members by email, they must join using the Team ID (share it privately) — inviting only stores their email.</p>
+              <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigator.clipboard.writeText(createdTeam.id || '');
+                      alert('Team ID copied to clipboard');
+                    }}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+                  >
+                    Copy Code
+                  </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); handleClose(); setCreatedTeam(null); }}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

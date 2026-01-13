@@ -174,7 +174,27 @@ export const Projects = () => {
                         </div>
                       </div>
                       <div className="text-xs text-gray-500">
-                        {new Date(project.createdAt).toLocaleDateString()}
+                        <div>{new Date(project.createdAt).toLocaleDateString()}</div>
+                        {(project.isOwner || project.ownerEmail === user?.email) && (
+                          <div className="mt-2">
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm('Delete this project? This will remove all tasks and cannot be undone.')) return;
+                                try {
+                                  await projectService.deleteProject(project.id);
+                                  await loadData();
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Failed to delete project');
+                                }
+                              }}
+                              className="px-3 py-1 text-xs text-black bg-red-600 hover:bg-red-700 rounded-md"
+                              title="Delete project"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </li>

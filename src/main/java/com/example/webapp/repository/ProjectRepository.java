@@ -35,6 +35,11 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
      * Find project by ID and owner ID (for authorization)
      */
     Optional<Project> findByIdAndOwnerId(Long id, Long ownerId);
+
+    /**
+     * Check if a user is a member of a project (via join table)
+     */
+    boolean existsByIdAndMembers_Id(Long id, Long userId);
     
     /**
      * Find all projects in a team

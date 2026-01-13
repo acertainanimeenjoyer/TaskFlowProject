@@ -22,6 +22,11 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
      * Find all tasks for a project with pagination
      */
     Page<Task> findByProjectId(Long projectId, Pageable pageable);
+
+    /**
+     * Find all tasks for a project (non-paginated)
+     */
+    List<Task> findByProjectId(Long projectId);
     
     /**
      * Find tasks by project and status
@@ -67,6 +72,17 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
      * Find task by ID and project ID
      */
     Optional<Task> findByIdAndProjectId(Long id, Long projectId);
+
+    /**
+     * Check if a user is assigned to a task (via join table)
+     */
+    boolean existsByIdAndAssignees_Id(Long id, Long userId);
+
+    /**
+     * Fetch a task's projectId without loading the full Task entity
+     */
+    @Query("SELECT t.projectId FROM Task t WHERE t.id = :taskId")
+    Optional<Long> findProjectIdById(Long taskId);
     
     /**
      * Find tasks by project and due date range
@@ -84,4 +100,11 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
      * Find tasks by project and priority
      */
     Page<Task> findByProjectIdAndPriority(Long projectId, String priority, Pageable pageable);
+
+    /**
+     * Find all tasks for a project with assignees and tags eagerly loaded.
+     * Use this for listing tasks to avoid lazy-loading issues.
+     */
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.assignees LEFT JOIN FETCH t.tags WHERE t.projectId = :projectId")
+    List<Task> findByProjectIdWithAssigneesAndTags(Long projectId);
 }

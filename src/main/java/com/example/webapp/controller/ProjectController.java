@@ -65,6 +65,30 @@ public class ProjectController {
                     .body("Failed to create project");
         }
     }
+
+    /**
+     * Delete a project (owner only)
+     * DELETE /api/projects/{id}
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteProject(@PathVariable Long id, Authentication authentication) {
+        try {
+            String userEmail = authentication.getName();
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+            projectService.deleteProject(id, user.getId());
+            return ResponseEntity.noContent().build();
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Delete project failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error deleting project", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to delete project");
+        }
+    }
     
     /**
      * Get all projects for the authenticated user

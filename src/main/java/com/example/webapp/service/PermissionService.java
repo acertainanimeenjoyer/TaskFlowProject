@@ -20,81 +20,94 @@ import java.util.Optional;
 @Service
 @Slf4j
 public class PermissionService {
-    
     @Autowired
     private ProjectRepository projectRepository;
-    
+
     @Autowired
     private TeamRepository teamRepository;
-    
+
     @Autowired
     private TaskRepository taskRepository;
-    
+
     @Autowired
     private UserRepository userRepository;
-    
+
+    /**
+     * Check if user is a team leader or manager.
+     */
+    public boolean isTeamLeaderOrManager(Long teamId, Long userId) {
+        // Manager is automatically a leader
+        if (teamRepository.findByIdAndManagerId(teamId, userId).isPresent()) {
+            return true;
+        }
+        // Avoid touching lazy collections (leaders) outside transactional context
+        return teamRepository.existsByIdAndLeaders_Id(teamId, userId);
+    }
+
+    /**
+     * Check if user is a member of a team by user ID.
+     * Manager and leaders are treated as members.
+     */
+    public boolean isTeamMember(Long teamId, Long userId) {
+        // Manager is automatically a member
+        if (teamRepository.findByIdAndManagerId(teamId, userId).isPresent()) {
+            return true;
+        }
+        // Leaders are automatically members
+        if (teamRepository.existsByIdAndLeaders_Id(teamId, userId)) {
+            return true;
+        }
+        // Avoid touching lazy collections (members) outside transactional context
+        return teamRepository.existsByIdAndMembers_Id(teamId, userId);
+    }
+
     /**
      * Check if user can access a project:
      * - Project owner or direct member
      * - Team owner or leader (for team projects)
      */
     public boolean isProjectMember(Long projectId, Long userId) {
-        Optional<Project> project = projectRepository.findById(projectId);
-        if (project.isEmpty()) {
+        Optional<Project> projectOpt = projectRepository.findById(projectId);
+        if (projectOpt.isEmpty()) {
             log.warn("Project not found: {}", projectId);
             return false;
         }
-        
-        Project p = project.get();
-        
-        // Check if user is project owner
-        if (p.getOwnerId().equals(userId)) {
+
+        Project p = projectOpt.get();
+
+        // Project owner can always access
+        if (p.getOwnerId() != null && p.getOwnerId().equals(userId)) {
             log.debug("User {} is project owner for {}", userId, projectId);
             return true;
         }
-        
-        // Check if user is direct member
-        if (p.getMembers().stream().anyMatch(m -> m.getId().equals(userId))) {
+
+        // Direct project membership (exists query, no lazy init)
+        if (projectRepository.existsByIdAndMembers_Id(projectId, userId)) {
             log.debug("User {} is direct project member for {}", userId, projectId);
             return true;
         }
-        
-        // Check if project belongs to a team and user is team owner or leader
+
+        // If project belongs to a team, allow team manager/leader
         if (p.getTeamId() != null) {
-            Optional<Team> team = teamRepository.findById(p.getTeamId());
-            if (team.isPresent()) {
-                Team t = team.get();
-                // Check if user is team owner
-                if (t.getManagerId().equals(userId)) {
-                    log.debug("User {} is team manager for project {}", userId, projectId);
-                    return true;
-                }
-                // Check if user is team leader
-                if (t.getLeaders().stream().anyMatch(l -> l.getId().equals(userId))) {
-                    log.debug("User {} is team leader for project {}", userId, projectId);
-                    return true;
-                }
+            Long teamId = p.getTeamId();
+            if (teamRepository.findByIdAndManagerId(teamId, userId).isPresent()) {
+                log.debug("User {} is team manager for project {}", userId, projectId);
+                return true;
+            }
+            if (teamRepository.existsByIdAndLeaders_Id(teamId, userId)) {
+                log.debug("User {} is team leader for project {}", userId, projectId);
+                return true;
+            }
+
+            // Team members can access team-owned projects
+            if (teamRepository.existsByIdAndMembers_Id(teamId, userId)) {
+                log.debug("User {} is team member for project {}", userId, projectId);
+                return true;
             }
         }
-        
+
         log.debug("User {} is NOT allowed to access project {}", userId, projectId);
         return false;
-    }
-    
-    /**
-     * Check if user is a member of a team by user ID
-     */
-    public boolean isTeamMember(Long teamId, Long userId) {
-        Optional<Team> team = teamRepository.findById(teamId);
-        if (team.isEmpty()) {
-            log.warn("Team not found: {}", teamId);
-            return false;
-        }
-        
-        Team t = team.get();
-        boolean isMember = t.getMembers().stream().anyMatch(m -> m.getId().equals(userId));
-        log.debug("User {} team member check for {}: {}", userId, teamId, isMember);
-        return isMember;
     }
     
     /**
@@ -102,28 +115,13 @@ public class PermissionService {
      * Also checks if user is the team manager
      */
     public boolean isTeamMemberByEmail(Long teamId, String userEmail) {
-        Optional<Team> team = teamRepository.findById(teamId);
-        if (team.isEmpty()) {
-            log.warn("Team not found: {}", teamId);
-            return false;
-        }
-        
-        Team t = team.get();
-        
-        // Look up user by email to get their ID
         Optional<User> user = userRepository.findByEmail(userEmail);
         if (user.isEmpty()) {
             log.warn("User not found: {}", userEmail);
             return false;
         }
-        
-        // Check if user is the manager
-        if (t.getManagerId().equals(user.get().getId())) {
-            log.debug("User {} is manager of team {}", userEmail, teamId);
-            return true;
-        }
-        
-        boolean isMember = t.getMembers().stream().anyMatch(m -> m.getId().equals(user.get().getId()));
+
+        boolean isMember = isTeamMember(teamId, user.get().getId());
         log.debug("User {} (email: {}) team member check for {}: {}", user.get().getId(), userEmail, teamId, isMember);
         return isMember;
     }
@@ -132,14 +130,7 @@ public class PermissionService {
      * Check if user is the manager of a team
      */
     public boolean isManager(Long teamId, Long userId) {
-        Optional<Team> team = teamRepository.findById(teamId);
-        if (team.isEmpty()) {
-            log.warn("Team not found: {}", teamId);
-            return false;
-        }
-        
-        Team t = team.get();
-        boolean isManager = t.getManagerId().equals(userId);
+        boolean isManager = teamRepository.findByIdAndManagerId(teamId, userId).isPresent();
         log.debug("User {} manager check for team {}: {}", userId, teamId, isManager);
         return isManager;
     }
@@ -167,52 +158,49 @@ public class PermissionService {
      * 3. They are the team owner or team leader (for the project's team)
      */
     public boolean canAccessTask(Long taskId, Long userId) {
-        // Find the task
-        Optional<Task> taskOpt = taskRepository.findById(taskId);
-        if (taskOpt.isEmpty()) {
-            log.warn("Task not found: {}", taskId);
-            return false;
-        }
-        
-        Task task = taskOpt.get();
-        
-        // Check if user is assigned to the task
-        if (task.getAssignees().stream().anyMatch(a -> a.getId().equals(userId))) {
+        // Check if user is assigned to the task (exists query; avoids lazy init)
+        if (taskRepository.existsByIdAndAssignees_Id(taskId, userId)) {
             log.debug("User {} is assigned to task {}", userId, taskId);
             return true;
         }
-        
-        // Get the project to check ownership and team
-        Long projectId = task.getProjectId();
+
+        // Find projectId without loading the Task entity
+        Optional<Long> projectIdOpt = taskRepository.findProjectIdById(taskId);
+        if (projectIdOpt.isEmpty()) {
+            log.warn("Task not found: {}", taskId);
+            return false;
+        }
+        Long projectId = projectIdOpt.get();
+
+        // Check if user is the project owner
+        if (projectRepository.findByIdAndOwnerId(projectId, userId).isPresent()) {
+            log.debug("User {} is project owner for task {}", userId, taskId);
+            return true;
+        }
+
+        // Load project to check team relationship
         Optional<Project> projectOpt = projectRepository.findById(projectId);
         if (projectOpt.isEmpty()) {
             log.warn("Project not found: {}", projectId);
             return false;
         }
-        
+
         Project project = projectOpt.get();
-        
-        // Check if user is the project owner
-        if (project.getOwnerId().equals(userId)) {
-            log.debug("User {} is project owner for task {}", userId, taskId);
-            return true;
-        }
         
         // Check if project belongs to a team and user is team owner or leader
         if (project.getTeamId() != null) {
-            Optional<Team> teamOpt = teamRepository.findById(project.getTeamId());
-            if (teamOpt.isPresent()) {
-                Team team = teamOpt.get();
-                // Check if user is team owner
-                if (team.getManagerId().equals(userId)) {
-                    log.debug("User {} is team manager for task {}", userId, taskId);
-                    return true;
-                }
-                // Check if user is team leader
-                if (team.getLeaders().stream().anyMatch(l -> l.getId().equals(userId))) {
-                    log.debug("User {} is team leader for task {}", userId, taskId);
-                    return true;
-                }
+            Long teamId = project.getTeamId();
+
+            // Check if user is team owner
+            if (teamRepository.findByIdAndManagerId(teamId, userId).isPresent()) {
+                log.debug("User {} is team manager for task {}", userId, taskId);
+                return true;
+            }
+
+            // Check if user is team leader (exists query, no lazy init)
+            if (teamRepository.existsByIdAndLeaders_Id(teamId, userId)) {
+                log.debug("User {} is team leader for task {}", userId, taskId);
+                return true;
             }
         }
         
@@ -224,14 +212,7 @@ public class PermissionService {
      * Check if user is a team leader (promoted member, not the owner)
      */
     public boolean isTeamLeader(Long teamId, Long userId) {
-        Optional<Team> team = teamRepository.findById(teamId);
-        if (team.isEmpty()) {
-            log.warn("Team not found: {}", teamId);
-            return false;
-        }
-        
-        Team t = team.get();
-        boolean isLeader = t.getLeaders().stream().anyMatch(l -> l.getId().equals(userId));
+        boolean isLeader = teamRepository.existsByIdAndLeaders_Id(teamId, userId);
         log.debug("User {} team leader check for {}: {}", userId, teamId, isLeader);
         return isLeader;
     }
@@ -240,14 +221,7 @@ public class PermissionService {
      * Check if user is the team owner (manager) by userId
      */
     public boolean isTeamOwner(Long teamId, Long userId) {
-        Optional<Team> team = teamRepository.findById(teamId);
-        if (team.isEmpty()) {
-            log.warn("Team not found: {}", teamId);
-            return false;
-        }
-        
-        Team t = team.get();
-        boolean isOwner = t.getManagerId().equals(userId);
+        boolean isOwner = teamRepository.findByIdAndManagerId(teamId, userId).isPresent();
         log.debug("User {} team owner check for {}: {}", userId, teamId, isOwner);
         return isOwner;
     }

@@ -10,7 +10,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
 import { Teams } from './pages/Teams';
-import { TeamDetail } from './pages/TeamDetail';
+import TeamDetail from './pages/TeamDetail';
 import { Projects } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { TaskBoard } from './pages/TaskBoard';

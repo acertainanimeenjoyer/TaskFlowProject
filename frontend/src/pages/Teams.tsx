@@ -50,15 +50,16 @@ export const Teams = () => {
 
   const handleCreateTeam = async (name: string, inviteEmails: string[]) => {
     const team = await teamService.createTeam(name);
-    
+
     // Send invites if any
     if (inviteEmails.length > 0) {
       await Promise.all(
         inviteEmails.map(email => teamService.inviteMember(team.id, email))
       );
     }
-    
+
     await loadTeams();
+    return team;
   };
 
   const handleJoinTeam = async (teamId: string) => {
@@ -167,8 +168,29 @@ export const Teams = () => {
                           </p>
                         )}
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(team.createdAt).toLocaleDateString()}
+                      <div className="text-xs text-gray-500 text-right">
+                        <div>{new Date(team.createdAt).toLocaleDateString()}</div>
+                        {/* Delete button visible to team manager only */}
+                        {user?.email === team.managerEmail && (
+                          <div className="mt-2">
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm('Delete this team and all its projects? This cannot be undone.')) return;
+                                try {
+                                  await teamService.deleteTeam(team.id);
+                                  await loadTeams();
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Failed to delete team');
+                                }
+                              }}
+                              className="px-3 py-1 text-xs text-black bg-red-600 hover:bg-red-700 rounded-md"
+                              title="Delete team"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </li>

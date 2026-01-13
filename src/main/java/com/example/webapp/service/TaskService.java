@@ -3,6 +3,8 @@ package com.example.webapp.service;
 import com.example.webapp.dto.CreateTaskRequest;
 import com.example.webapp.dto.UpdateTaskRequest;
 import com.example.webapp.entity.Task;
+import com.example.webapp.entity.Tag;
+import com.example.webapp.entity.User;
 import com.example.webapp.repository.TaskRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,8 +14,13 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Service for Task management operations
@@ -40,9 +47,16 @@ public class TaskService {
     @Autowired
     private com.example.webapp.repository.ProjectRepository projectRepository;
     
+    @Autowired
+    private com.example.webapp.repository.TagRepository tagRepository;
+    
+    @Autowired
+    private com.example.webapp.repository.UserRepository userRepository;
+    
     /**
      * Create a new task in a project
      */
+    @Transactional
     public Task createTask(Long projectId, Long userId, CreateTaskRequest request) {
         log.info("Creating task '{}' in project {} by user {}", request.getTitle(), projectId, userId);
         
@@ -61,16 +75,38 @@ public class TaskService {
                 .createdBy(userId)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
+                .assignees(new HashSet<>())
+                .tags(new HashSet<>())
                 .build();
-        
-        Task savedTask = taskRepository.save(task);
+
+        // Assign tags if provided
+        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
+            Set<Tag> tags = request.getTagIds().stream()
+                .map(Long::parseLong)
+                .map(tagId -> tagRepository.findById(tagId)
+                    .orElseThrow(() -> new IllegalArgumentException("Tag not found: " + tagId)))
+                .filter(tag -> tag.getProjectId().equals(projectId)) // Security: ensure tag belongs to project
+                .collect(Collectors.toSet());
+            task.setTags(tags);
+        }
+
+        // Assign users if provided
+        if (request.getAssigneeIds() != null && !request.getAssigneeIds().isEmpty()) {
+            Set<User> assignees = request.getAssigneeIds().stream()
+                .map(Long::parseLong)
+                .map(assigneeId -> userRepository.findById(assigneeId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found: " + assigneeId)))
+                .collect(Collectors.toSet());
+            task.setAssignees(assignees);
+        }
+
+        final Task savedTask = taskRepository.save(task);
         log.info("Task created with ID: {}", savedTask.getId());
-        
+
         // Send notifications
-        projectRepository.findById(projectId).ifPresent(project -> {
-            notificationService.notifyTaskCreated(savedTask, project, userId);
-        });
-        
+        projectRepository.findById(projectId).ifPresent(project ->
+            notificationService.notifyTaskCreated(savedTask, project, userId));
+
         return savedTask;
     }
     
@@ -79,6 +115,7 @@ public class TaskService {
      * Status updates are allowed for all project members (drag & drop)
      * Other field updates require project owner or team owner/leader permission
      */
+    @Transactional
     public Task updateTask(Long taskId, Long userId, UpdateTaskRequest request) {
         log.info("Updating task {} by user {}", taskId, userId);
         
@@ -124,8 +161,39 @@ public class TaskService {
         if (request.getDueDate() != null) {
             task.setDueDate(request.getDueDate());
         }
-        // Note: Assignee and tag updates now handled through separate endpoints
-        // as they require entity lookups and Set management
+        
+        // Update tags if provided
+        if (request.getTagIds() != null) {
+            if (request.getTagIds().isEmpty()) {
+                task.setTags(new HashSet<>());
+                log.info("Cleared tags for task {}", taskId);
+            } else {
+                Set<Tag> tags = request.getTagIds().stream()
+                        .map(Long::parseLong)
+                        .map(tagId -> tagRepository.findById(tagId)
+                                .orElseThrow(() -> new IllegalArgumentException("Tag not found: " + tagId)))
+                        .filter(tag -> tag.getProjectId().equals(task.getProjectId())) // Security check
+                        .collect(Collectors.toSet());
+                task.setTags(tags);
+                log.info("Updated tags for task {} to {} tags", taskId, tags.size());
+            }
+        }
+        
+        // Update assignees if provided
+        if (request.getAssigneeIds() != null) {
+            if (request.getAssigneeIds().isEmpty()) {
+                task.setAssignees(new HashSet<>());
+                log.info("Cleared assignees for task {}", taskId);
+            } else {
+                Set<User> assignees = request.getAssigneeIds().stream()
+                        .map(Long::parseLong)
+                        .map(assigneeId -> userRepository.findById(assigneeId)
+                                .orElseThrow(() -> new IllegalArgumentException("User not found: " + assigneeId)))
+                        .collect(Collectors.toSet());
+                task.setAssignees(assignees);
+                log.info("Updated assignees for task {} to {} users", taskId, assignees.size());
+            }
+        }
         
         task.setUpdatedAt(LocalDateTime.now());
         
@@ -147,6 +215,7 @@ public class TaskService {
      * Project owners and team leaders/owners can see all tasks.
      * Regular members can only see tasks they are assigned to.
      */
+    @Transactional(readOnly = true)
     public Page<Task> listTasks(Long projectId, Long userId, String status, 
                                  Long assigneeId, Long tagId, String priority,
                                  LocalDateTime dueDateStart, LocalDateTime dueDateEnd,
@@ -166,8 +235,16 @@ public class TaskService {
         Long effectiveAssigneeId = canSeeAllTasks ? assigneeId : userId;
         
         // Use filter service for comprehensive filtering
-        return taskFilterService.filterTasks(projectId, status, effectiveAssigneeId, tagId, priority, 
+        Page<Task> tasks = taskFilterService.filterTasks(projectId, status, effectiveAssigneeId, tagId, priority, 
                 dueDateStart, dueDateEnd, pageable);
+        
+        // Force initialization of lazy collections while still in transaction
+        tasks.getContent().forEach(task -> {
+            if (task.getAssignees() != null) task.getAssignees().size();
+            if (task.getTags() != null) task.getTags().size();
+        });
+        
+        return tasks;
     }
     
     /**

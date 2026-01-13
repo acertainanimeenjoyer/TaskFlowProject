@@ -11,6 +11,7 @@ export const TeamDetail = () => {
   const [error, setError] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState('');
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const { registerChat, registerAndOpenChat } = useChat();
@@ -59,6 +60,7 @@ export const TeamDetail = () => {
       await teamService.inviteMember(teamId, inviteEmail);
       setInviteEmail('');
       await loadTeam();
+      setInviteSuccess(`Invitation stored. The invitee must join using the Team ID: ${teamId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to invite member');
     } finally {
@@ -100,8 +102,8 @@ export const TeamDetail = () => {
   };
 
   const handleCopyTeamId = () => {
-    if (teamId) {
-      navigator.clipboard.writeText(teamId);
+    if (team?.id) {
+      navigator.clipboard.writeText(team.id);
       alert('Team ID copied to clipboard!');
     }
   };
@@ -201,9 +203,8 @@ export const TeamDetail = () => {
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{team.name}</h2>
                 <p className="text-sm text-gray-600 mt-1">Manager: {team.managerEmail}</p>
-                <p className="text-sm text-gray-600">
-                  Members: {team.memberIds.length}/10
-                </p>
+                <p className="text-sm text-gray-600">Members: {team.memberIds.length}/10</p>
+                <p className="text-sm text-gray-600 mt-1">Team ID: <span className="font-mono">{team.id}</span></p>
               </div>
               <div className="flex space-x-2">
                 <button
@@ -221,6 +222,24 @@ export const TeamDetail = () => {
                   </svg>
                   <span>Open Chat</span>
                 </button>
+                {isOwner && (
+                  <button
+                    onClick={async () => {
+                      if (!teamId) return;
+                      if (!confirm('Delete this team and all its projects? This cannot be undone.')) return;
+                      try {
+                        await teamService.deleteTeam(teamId);
+                        navigate('/teams');
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Failed to delete team');
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-black bg-red-600 hover:bg-red-700 rounded-md"
+                    title="Delete team"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
 
@@ -250,6 +269,9 @@ export const TeamDetail = () => {
                     {isInviting ? 'Inviting...' : 'Invite'}
                   </button>
                 </form>
+                {inviteSuccess && (
+                  <p className="mt-2 text-sm text-green-600">{inviteSuccess}</p>
+                )}
                 {team.memberIds.length + team.inviteEmails.length >= 10 && (
                   <p className="mt-2 text-sm text-red-600">
                     Team is full (maximum 10 members)
@@ -277,29 +299,27 @@ export const TeamDetail = () => {
 
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Members ({team.memberIds.length})
+              Members ({team.memberEmails?.length ?? team.memberIds.length})
             </h3>
             <div className="mb-3 text-sm text-gray-600">
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mr-2">👑 Owner</span>
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-2">⭐ Leader</span>
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Member</span>
             </div>
-            {team.memberIds.length === 0 ? (
+            {(team.memberIds.length === 0) ? (
               <p className="text-gray-500 text-sm">No members yet</p>
             ) : (
               <ul className="space-y-2">
-                {team.memberIds.map((memberId) => {
+                {team.memberIds.map((memberId, idx) => {
                   const role = getMemberRole(memberId);
-                  const isSelf = memberId === user?.id;
-                  // Check if this is the owner (first member or by some logic)
-                  // We'll mark owner by checking if they're NOT in leaderIds but ARE the first member
-                  // Actually, we need to check email match - let's use a simple approach
-                  const isThisOwner = memberId === team.memberIds[0] && !team.leaderIds?.includes(memberId);
-                  
+                  const email = team.memberEmails?.[idx] ?? memberId;
+                  const isSelf = email === user?.email;
+                  const isThisOwner = email === team.managerEmail;
+
                   return (
                     <li key={memberId} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md">
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-700">{memberId}</span>
+                        <span className="text-sm text-gray-700">{email}</span>
                         {isThisOwner && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                             👑 Owner
@@ -358,3 +378,5 @@ export const TeamDetail = () => {
     </div>
   );
 };
+
+export default TeamDetail;

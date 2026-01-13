@@ -26,7 +26,7 @@ public class TaskResponse {
     private LocalDateTime dueDate;
     private String createdBy;
     private List<String> assigneeIds;
-    private List<String> tagIds;
+    private List<String> tags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private boolean isOverdue;

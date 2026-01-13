@@ -72,7 +72,7 @@ public class Task {
     private User creator;
     
     // Junction table for task assignees
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "task_assignees",
         joinColumns = @JoinColumn(name = "task_id"),
@@ -83,7 +83,7 @@ public class Task {
     private Set<User> assignees = new HashSet<>();
     
     // Junction table for task tags
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "task_tags",
         joinColumns = @JoinColumn(name = "task_id"),

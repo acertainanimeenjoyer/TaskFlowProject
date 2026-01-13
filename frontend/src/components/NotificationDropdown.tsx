@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { notificationService, type Notification } from '../services/notification.service';
 
@@ -9,6 +10,9 @@ export const NotificationDropdown = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const portalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadUnreadCount();
@@ -24,9 +28,31 @@ export const NotificationDropdown = () => {
     }
   }, [isOpen]);
 
+  // When open, compute button position so dropdown can render into document.body above all UI
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const updatePos = () => {
+      const btn = buttonRef.current;
+      if (!btn) return setPos(null);
+      const r = btn.getBoundingClientRect();
+      setPos({ top: r.bottom + window.scrollY, right: window.innerWidth - r.right });
+    };
+
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideHost = dropdownRef.current && dropdownRef.current.contains(target);
+      const insidePortal = portalRef.current && portalRef.current.contains(target as Node);
+      if (!insideHost && !insidePortal) {
         setIsOpen(false);
       }
     };
@@ -131,6 +157,7 @@ export const NotificationDropdown = () => {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="relative text-gray-500 hover:text-gray-700 p-1"
       >
@@ -142,8 +169,9 @@ export const NotificationDropdown = () => {
         )}
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50">
+      {isOpen && pos && createPortal(
+        // Render into body and position absolutely so this dropdown is outside other stacking contexts
+        <div ref={portalRef} style={{ position: 'absolute', top: pos.top + 'px', right: pos.right + 'px' }} className="w-80 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-[300001]">
           {/* Header */}
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
             <h3 className="font-medium text-gray-900">Notifications</h3>
@@ -215,7 +243,7 @@ export const NotificationDropdown = () => {
               </button>
             </div>
           )}
-        </div>
+        </div>, document.body
       )}
     </div>
   );

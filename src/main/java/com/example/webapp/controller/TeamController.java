@@ -55,8 +55,30 @@ public class TeamController {
             User user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
             
-            Team team = teamService.createTeam(user.getId(), request.getName());
-            TeamResponse response = mapToResponse(team);
+            Team created = teamService.createTeam(user.getId(), request.getName(), request.getJoinMode());
+            TeamResponse response;
+            try {
+                Team team = teamService.getTeamWithMembers(created.getId()).orElse(created);
+                response = mapToResponse(team);
+            } catch (Exception ex) {
+                log.warn("Failed to map created team to response, returning minimal info", ex);
+                // Fallback response with minimal fields
+                String managerEmail = user.getEmail();
+                response = TeamResponse.builder()
+                        .id(String.valueOf(created.getId()))
+                        .name(created.getName())
+                        .managerEmail(managerEmail)
+                        .memberEmails(java.util.List.of(managerEmail))
+                        .memberIds(java.util.List.of(String.valueOf(user.getId())))
+                        .leaderIds(java.util.List.of())
+                        .inviteEmails(created.getInviteEmails().stream().toList())
+                        .createdAt(created.getCreatedAt())
+                        .memberCount(created.getMembers().size())
+                        .inviteCount(created.getInviteEmails().size())
+                        .code(created.getCode())
+                        .joinMode(created.getJoinMode())
+                        .build();
+            }
             
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
             
@@ -67,6 +89,30 @@ public class TeamController {
             log.error("Error creating team", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to create team");
+        }
+    }
+
+    /**
+     * Delete a team (manager only)
+     * DELETE /api/teams/{id}
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteTeam(@PathVariable Long id, Authentication authentication) {
+        try {
+            String userEmail = authentication.getName();
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+            teamService.deleteTeam(id, user.getId());
+            return ResponseEntity.noContent().build();
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Delete team failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error deleting team", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to delete team");
         }
     }
     
@@ -113,21 +159,42 @@ public class TeamController {
      * Join a team (user must be invited)
      * POST /api/teams/{id}/join
      */
-    @PostMapping("/{id}/join")
-    public ResponseEntity<?> joinTeam(
-            @PathVariable Long id,
+        @PostMapping("/{id}/join")
+        public ResponseEntity<?> joinTeam(
+            @PathVariable("id") String id,
             Authentication authentication) {
         
         try {
             String userEmail = authentication.getName();
             log.info("User {} attempting to join team {}", userEmail, id);
             
-            // Get user ID
-            User user = userRepository.findByEmail(userEmail)
+                // Resolve team by numeric ID or by code
+                Long teamId;
+                Team team;
+                try {
+                teamId = Long.parseLong(id);
+                team = teamService.getTeamById(teamId)
+                    .orElseThrow(() -> new IllegalArgumentException("Team not found"));
+                } catch (NumberFormatException ex) {
+                team = teamService.findByCode(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Team not found by code"));
+                teamId = team.getId();
+                }
+
+                // Get user ID
+                User user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new IllegalArgumentException("User not found"));
-            
-            Team team = teamService.joinTeam(id, user.getId());
-            TeamResponse response = mapToResponse(team);
+
+                boolean byCode = false;
+                try {
+                    Long.parseLong(id);
+                    byCode = false;
+                } catch (NumberFormatException nfe) {
+                    byCode = true;
+                }
+
+                Team result = teamService.joinTeam(teamId, user.getId(), byCode);
+            TeamResponse response = mapToResponse(result);
             
             return ResponseEntity.ok(response);
             
@@ -347,24 +414,37 @@ public class TeamController {
         String managerEmail = manager != null ? manager.getEmail() : "Unknown";
         
         java.util.List<String> memberIds = team.getMembers().stream()
-                .map(User::getId)
-                .map(id -> id != null ? String.valueOf(id) : null)
-                .toList();
+            .map(User::getId)
+            .map(id -> id != null ? String.valueOf(id) : null)
+            .toList();
+        
+        java.util.List<String> memberEmails = team.getMembers().stream()
+            .map(User::getEmail)
+            .toList();
         
         java.util.List<String> leaderIds = team.getLeaders().stream()
-                .map(User::getId)
-                .map(id -> id != null ? String.valueOf(id) : null)
-                .toList();
-        
+            .map(User::getId)
+            .map(id -> id != null ? String.valueOf(id) : null)
+            .toList();
+
+        java.util.List<String> inviteEmails = team.getInviteEmails().stream().toList();
+        String code = team.getCode();
+        int joinMode = team.getJoinMode();
+
         return TeamResponse.builder()
-                .id(String.valueOf(team.getId()))
-                .name(team.getName())
-                .managerEmail(managerEmail)
-                .memberIds(memberIds)
-                .leaderIds(leaderIds)
-                .createdAt(team.getCreatedAt())
-                .memberCount(team.getMembers().size())
-                .build();
+            .id(String.valueOf(team.getId()))
+            .name(team.getName())
+            .managerEmail(managerEmail)
+            .memberEmails(memberEmails)
+            .code(code)
+            .joinMode(joinMode)
+            .memberIds(memberIds)
+            .leaderIds(leaderIds)
+            .inviteEmails(inviteEmails)
+            .createdAt(team.getCreatedAt())
+            .memberCount(team.getMembers().size())
+            .inviteCount(inviteEmails.size())
+            .build();
     }
     
     /**

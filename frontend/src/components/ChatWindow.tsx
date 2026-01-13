@@ -23,7 +23,25 @@ export const ChatWindow = ({ chatId, channelId, channelType, title }: ChatWindow
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { isConnected, sendMessage, subscribe, unsubscribe } = useWebSocket();
+  const { isConnected, sendMessage, subscribe } = useWebSocket();
+
+  const mergeMessages = (existing: ChatMessage[], incoming: ChatMessage[]) => {
+    const all = [...existing, ...incoming];
+    const seen = new Set<string>();
+    const deduped: ChatMessage[] = [];
+    for (const m of all) {
+      const key = m.id || `${m.createdAt || ''}|${m.senderEmail || ''}|${m.senderId || ''}|${m.text || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(m);
+    }
+    deduped.sort((a, b) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return at - bt;
+    });
+    return deduped;
+  };
 
   // Load history when channelId changes (independent of WebSocket)
   useEffect(() => {
@@ -37,24 +55,29 @@ export const ChatWindow = ({ chatId, channelId, channelType, title }: ChatWindow
     if (channelId && isConnected) {
       const destination = `/topic/chat/${channelType}/${channelId}`;
 
-      subscribe(destination, (message) => {
+      const sub = subscribe(destination, (message) => {
         const newMessage: ChatMessage = {
           id: message.id || Date.now().toString(),
           channelType: message.channelType || channelType,
           channelId: message.channelId || channelId,
           senderId: message.senderId,
+          senderEmail: message.senderEmail,
           senderName: message.senderName,
           text: message.text,
           createdAt: message.createdAt || new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev) => mergeMessages(prev, [newMessage]));
         
         // Update last message in chat store
         updateChatLastMessage(chatId, newMessage.text, newMessage.createdAt);
       });
 
       return () => {
-        unsubscribe(destination);
+        try {
+          sub?.unsubscribe?.();
+        } catch {
+          // ignore
+        }
       };
     }
   }, [channelId, channelType, isConnected]);
@@ -81,7 +104,7 @@ export const ChatWindow = ({ chatId, channelId, channelType, title }: ChatWindow
         history = await chatService.getTaskChatHistory(channelId);
       }
 
-      setMessages(history);
+      setMessages((prev) => mergeMessages(prev, history));
       
       // Update last message in store if history exists
       if (history.length > 0) {
@@ -179,7 +202,12 @@ export const ChatWindow = ({ chatId, channelId, channelType, title }: ChatWindow
         )}
 
         {messages.map((message) => {
-          const isOwnMessage = message.senderId === user?.email;
+          const isOwnMessage =
+            (!!message.senderEmail && message.senderEmail === user?.email) ||
+            (String(message.senderId ?? '') !== '' && String(message.senderId) === String(user?.id ?? ''));
+
+          const senderLabel =
+            message.senderEmail || message.senderName || message.senderId || 'Unknown';
           return (
             <div
               key={message.id}
@@ -194,7 +222,7 @@ export const ChatWindow = ({ chatId, channelId, channelType, title }: ChatWindow
                 style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
               >
                 <p className={`text-xs font-medium mb-1 ${isOwnMessage ? 'text-blue-200' : 'text-blue-600'}`}>
-                  {isOwnMessage ? 'You' : (message.senderName || message.senderId?.split('@')[0] || 'Unknown')}
+                  {isOwnMessage ? 'You' : senderLabel}
                 </p>
                 <p className="text-sm whitespace-pre-wrap break-all">
                   {message.text}

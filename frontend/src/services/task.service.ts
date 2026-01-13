@@ -11,8 +11,8 @@ export interface Task {
   status: 'TODO' | 'IN_PROGRESS' | 'DONE';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate?: string;
-  tags?: string[];
-  tagIds?: string[];
+  tags?: string[]; // Tag names from backend
+  tagIds?: string[]; // For sending to backend
   createdAt: string;
   updatedAt: string;
 }
@@ -45,7 +45,7 @@ export const taskService = {
     status?: string;
     priority?: string;
     dueDate?: string;
-    tags?: string[];
+    tagIds?: string[];
   }): Promise<Task> => {
     const response = await api.post(`/projects/${data.projectId}/tasks`, data);
     return response.data;

@@ -24,11 +24,12 @@ public class UserProfile {
     @Column(unique = true, nullable = false)
     private String email;
 
-    @Column(name = "avatar_id")
-    private String avatarId;          // GridFS File ID for avatar (or file path reference)
-    
-    @Column(name = "profile_pic_id")
-    private String profilePicId;      // GridFS File ID (or file path reference)
+    // Use relational storage for avatar/profile picture (e.g., file path or URL)
+    @Column(name = "avatar_path")
+    private String avatarPath;
+
+    @Column(name = "profile_pic_path")
+    private String profilePicPath;
 
     @Column(name = "hi_score")
     private int hiScore;

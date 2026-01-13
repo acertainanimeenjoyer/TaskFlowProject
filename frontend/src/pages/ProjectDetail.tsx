@@ -34,10 +34,17 @@ export const ProjectDetail = () => {
     
     setIsLoading(true);
     try {
-      const data = await projectService.getProject(projectId);
-      setProject(data);
+      const [data, tags] = await Promise.all([
+        projectService.getProject(projectId),
+        projectService.getTags(projectId),
+      ]);
+      
+      // Set project with tags as tag names only
+      setProject({ ...data, tags: tags.map(t => t.name) });
+      
       // Register this project's chat
       registerChat('project', projectId, data.name);
+      
       // Load available members if project has a team
       if (data.teamId) {
         await loadAvailableMembers();
@@ -103,8 +110,10 @@ export const ProjectDetail = () => {
     setError('');
 
     try {
-      const updatedProject = await projectService.addTag(projectId, tag);
-      setProject(updatedProject);
+      await projectService.addTag(projectId, tag);
+      // Refetch tags after adding
+      const tags = await projectService.getTags(projectId);
+      setProject(prev => prev ? { ...prev, tags: tags.map(t => t.name) } : null);
       setTagInput('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add tag');
@@ -117,8 +126,10 @@ export const ProjectDetail = () => {
     if (!projectId || !confirm(`Remove tag "${tag}"?`)) return;
 
     try {
-      const updatedProject = await projectService.removeTag(projectId, tag);
-      setProject(updatedProject);
+      await projectService.removeTag(projectId, tag);
+      // Refetch tags after removing
+      const tags = await projectService.getTags(projectId);
+      setProject(prev => prev ? { ...prev, tags: tags.map(t => t.name) } : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove tag');
     }
@@ -244,6 +255,24 @@ export const ProjectDetail = () => {
                 >
                   Task Board
                 </button>
+                {isOwner && (
+                  <button
+                    onClick={async () => {
+                      if (!project?.id) return;
+                      if (!confirm('Delete this project and all its tasks/tags? This cannot be undone.')) return;
+                      try {
+                        await projectService.deleteProject(project.id);
+                        navigate('/projects');
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Failed to delete project');
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-black bg-red-600 hover:bg-red-700 rounded-md"
+                    title="Delete project"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
 

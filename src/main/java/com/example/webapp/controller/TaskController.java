@@ -378,8 +378,8 @@ public class TaskController {
                 .assigneeIds(task.getAssignees() != null ? 
                         task.getAssignees().stream().map(u -> String.valueOf(u.getId())).toList() : 
                         java.util.Collections.emptyList())
-                .tagIds(task.getTags() != null ? 
-                        task.getTags().stream().map(t -> String.valueOf(t.getId())).toList() : 
+                .tags(task.getTags() != null ? 
+                        task.getTags().stream().map(t -> t.getName()).toList() : 
                         java.util.Collections.emptyList())
                 .createdAt(task.getCreatedAt())
                 .updatedAt(task.getUpdatedAt())

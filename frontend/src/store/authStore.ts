@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authService, type AuthResponse } from '../services/auth.service';
 import type { User } from '../services/user.service';
+import { useChatStore } from './chatStore';
 
 interface AuthState {
   user: User | null;
@@ -27,12 +28,12 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         const response: AuthResponse = await authService.login({ email, password });
-        const name = response.name || '';
+        const name = response.user.name || '';
         const nameParts = name.split(' ');
         set({
           user: {
-            id: response.userId,
-            email: response.email,
+            id: String(response.user.id),
+            email: response.user.email,
             firstName: nameParts[0] || name || 'User',
             lastName: nameParts.slice(1).join(' ') || '',
           },
@@ -53,6 +54,12 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         authService.logout();
+        // Close chat UI and clear stale chat state when switching users.
+        try {
+          useChatStore.getState().reset();
+        } catch {
+          // ignore
+        }
         set({
           user: null,
           token: null,
@@ -61,7 +68,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (user) => {
-        set({ user });
+        set({ user: user ? { ...user, id: String((user as any).id) } : null });
       },
     }),
     {

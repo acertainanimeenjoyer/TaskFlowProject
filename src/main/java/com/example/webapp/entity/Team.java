@@ -38,6 +38,12 @@ public class Team {
     @Column(nullable = false)
     private LocalDateTime createdAt;
     
+    @Column(name = "code", unique = true, length = 12)
+    private String code;
+
+    @Column(name = "join_mode", nullable = false)
+    private int joinMode = 1; // default EITHER
+    
     // Junction table for regular members
     @ManyToMany
     @JoinTable(
@@ -59,6 +65,13 @@ public class Team {
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
     private Set<User> leaders = new HashSet<>();
+
+    @ElementCollection
+    @CollectionTable(name = "team_invites", joinColumns = @JoinColumn(name = "team_id"))
+    @Column(name = "invite_email")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private Set<String> inviteEmails = new HashSet<>();
     
     // Projects in this team
     @OneToMany(mappedBy = "team")

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { taskService, type Task } from '../services/task.service';
-import { projectService, type Project } from '../services/project.service';
+import { projectService } from '../services/project.service';
 import { teamService } from '../services/team.service';
 
 interface TaskWithProject extends Task {

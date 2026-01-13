@@ -28,6 +28,7 @@ interface ChatState {
   closeChat: (chatId: string) => void;
   toggleChatList: () => void;
   setChatListOpen: (open: boolean) => void;
+  reset: () => void;
 }
 
 const MAX_OPEN_CHATS = 3;
@@ -103,4 +104,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toggleChatList: () => set((state) => ({ isChatListOpen: !state.isChatListOpen })),
   
   setChatListOpen: (open) => set({ isChatListOpen: open }),
+
+  reset: () =>
+    set({
+      availableChats: [],
+      openChats: [],
+      isChatListOpen: false,
+    }),
 }));

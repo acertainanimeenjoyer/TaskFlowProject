@@ -39,4 +39,9 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
      * Count comments for a task
      */
     long countByTaskId(Long taskId);
+
+    /**
+     * Delete all comments for a task
+     */
+    void deleteByTaskId(Long taskId);
 }

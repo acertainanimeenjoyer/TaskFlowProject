@@ -14,9 +14,12 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   token: string;
-  userId: string;
-  email: string;
-  name: string;
+  user: {
+    id: number;
+    email: string;
+    username: string;
+    name: string;
+  };
 }
 
 export const authService = {
@@ -26,11 +29,13 @@ export const authService = {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        if (error.response?.status === 401) {
-          throw new Error('Invalid email or password');
+        if (error.response?.status === 401 || error.response?.status === 404) {
+          // Backend returns { error: "..." } for invalid credentials
+          const errorMsg = error.response.data?.error || 'Invalid email or password';
+          throw new Error(errorMsg);
         }
-        if (error.response?.status === 404) {
-          throw new Error('Invalid email or password');
+        if (error.response?.data?.error) {
+          throw new Error(error.response.data.error);
         }
         if (error.response?.data?.message) {
           throw new Error(error.response.data.message);
@@ -46,8 +51,15 @@ export const authService = {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        if (error.response?.status === 409) {
-          throw new Error('An account with this email already exists');
+        if (error.response?.status === 400 || error.response?.status === 409) {
+          // Backend returns { error: "..." } for duplicate email
+          const errorMsg = error.response.data?.error || error.response.data?.message;
+          if (errorMsg) {
+            throw new Error(errorMsg);
+          }
+        }
+        if (error.response?.data?.error) {
+          throw new Error(error.response.data.error);
         }
         if (error.response?.data?.message) {
           throw new Error(error.response.data.message);

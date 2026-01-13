@@ -19,9 +19,6 @@ import java.time.LocalDateTime;
 public class UserAvatarService {
     
     @Autowired
-    private GridFsStorageService gridFsStorageService;
-    
-    @Autowired
     private UserProfileRepository userProfileRepository;
     
     /**
@@ -39,24 +36,24 @@ public class UserAvatarService {
                         .email(email)
                         .build());
         
-        // Store old avatar ID for deletion
-        String oldAvatarId = profile.getAvatarId();
-        
-        // Upload new avatar
+        // Store old avatar path for deletion (if needed)
+        String oldAvatarPath = profile.getAvatarPath();
+
+        // Save new avatar to file system/cloud and get path
         String filename = "avatar_" + email + "_" + System.currentTimeMillis();
-        String newAvatarId = gridFsStorageService.storeFile(file, filename);
-        
-        // Update profile with new avatar ID
-        profile.setAvatarId(newAvatarId);
+        String newAvatarPath = saveFileToStorage(file, filename); // Implement this method for file system/cloud
+
+        // Update profile with new avatar path
+        profile.setAvatarPath(newAvatarPath);
         profile.setUpdatedAt(LocalDateTime.now());
         UserProfile updatedProfile = userProfileRepository.save(profile);
-        
-        // Delete old avatar if exists
-        if (oldAvatarId != null && !oldAvatarId.isEmpty()) {
-            log.info("Deleting old avatar: {}", oldAvatarId);
-            gridFsStorageService.deleteFile(oldAvatarId);
+
+        // Optionally delete old avatar file if exists
+        if (oldAvatarPath != null && !oldAvatarPath.isEmpty()) {
+            log.info("Deleting old avatar file: {}", oldAvatarPath);
+            deleteFileFromStorage(oldAvatarPath); // Implement this method for file system/cloud
         }
-        
+
         log.info("Avatar replaced successfully for user: {}", email);
         return updatedProfile;
     }
@@ -76,20 +73,20 @@ public class UserAvatarService {
                         .email(email)
                         .build());
         
-        String oldProfilePicId = profile.getProfilePicId();
-        
+        String oldProfilePicPath = profile.getProfilePicPath();
+
         String filename = "profile_" + email + "_" + System.currentTimeMillis();
-        String newProfilePicId = gridFsStorageService.storeFile(file, filename);
-        
-        profile.setProfilePicId(newProfilePicId);
+        String newProfilePicPath = saveFileToStorage(file, filename); // Implement this method for file system/cloud
+
+        profile.setProfilePicPath(newProfilePicPath);
         profile.setUpdatedAt(LocalDateTime.now());
         UserProfile updatedProfile = userProfileRepository.save(profile);
-        
-        if (oldProfilePicId != null && !oldProfilePicId.isEmpty()) {
-            log.info("Deleting old profile pic: {}", oldProfilePicId);
-            gridFsStorageService.deleteFile(oldProfilePicId);
+
+        if (oldProfilePicPath != null && !oldProfilePicPath.isEmpty()) {
+            log.info("Deleting old profile pic file: {}", oldProfilePicPath);
+            deleteFileFromStorage(oldProfilePicPath); // Implement this method for file system/cloud
         }
-        
+
         log.info("Profile pic replaced successfully for user: {}", email);
         return updatedProfile;
     }
@@ -102,9 +99,9 @@ public class UserAvatarService {
         UserProfile profile = userProfileRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User profile not found"));
         
-        if (profile.getAvatarId() != null) {
-            gridFsStorageService.deleteFile(profile.getAvatarId());
-            profile.setAvatarId(null);
+        if (profile.getAvatarPath() != null) {
+            deleteFileFromStorage(profile.getAvatarPath()); // Implement this method for file system/cloud
+            profile.setAvatarPath(null);
             profile.setUpdatedAt(LocalDateTime.now());
             userProfileRepository.save(profile);
             log.info("Avatar deleted for user: {}", email);
@@ -119,12 +116,23 @@ public class UserAvatarService {
         UserProfile profile = userProfileRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User profile not found"));
         
-        if (profile.getProfilePicId() != null) {
-            gridFsStorageService.deleteFile(profile.getProfilePicId());
-            profile.setProfilePicId(null);
+        if (profile.getProfilePicPath() != null) {
+            deleteFileFromStorage(profile.getProfilePicPath()); // Implement this method for file system/cloud
+            profile.setProfilePicPath(null);
             profile.setUpdatedAt(LocalDateTime.now());
             userProfileRepository.save(profile);
             log.info("Profile picture deleted for user: {}", email);
         }
+    }
+
+    // Example stub methods for file system/cloud storage
+    private String saveFileToStorage(MultipartFile file, String filename) throws IOException {
+        // Implement file saving logic here (e.g., save to disk, upload to cloud)
+        // Return the file path or URL
+        return "path/to/" + filename;
+    }
+
+    private void deleteFileFromStorage(String filePath) {
+        // Implement file deletion logic here (e.g., delete from disk, cloud)
     }
 }

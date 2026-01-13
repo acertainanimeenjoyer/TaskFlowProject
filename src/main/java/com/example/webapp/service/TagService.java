@@ -71,6 +71,25 @@ public class TagService {
     }
     
     /**
+     * Delete a tag from a project
+     */
+    public void deleteTag(Long projectId, Long userId, String tagName) {
+        log.info("User {} deleting tag '{}' from project {}", userId, tagName, projectId);
+        
+        // Verify user has access to the project
+        if (!projectService.hasAccess(projectId, userId)) {
+            throw new IllegalArgumentException("You must be a project member to delete tags");
+        }
+        
+        // Find and delete the tag
+        Tag tag = tagRepository.findByProjectIdAndName(projectId, tagName)
+                .orElseThrow(() -> new IllegalArgumentException("Tag '" + tagName + "' not found in this project"));
+        
+        tagRepository.delete(tag);
+        log.info("Tag '{}' deleted from project {}", tagName, projectId);
+    }
+    
+    /**
      * Get tag count for a project
      */
     public long countTags(Long projectId) {

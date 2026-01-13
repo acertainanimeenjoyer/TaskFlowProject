@@ -308,21 +308,31 @@ export const Profile = () => {
       </div>
 
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) handleCancelUpload();
+          }}
+        >
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative">
+            <button
+              onClick={handleCancelUpload}
+              aria-label="Close upload dialog"
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 text-2xl leading-none"
+            >
+              ×
+            </button>
             <h3 className="text-lg font-medium text-gray-900 mb-4">Upload Avatar</h3>
             {avatarPreview && (
               <div className="mb-4 flex justify-center">
                 <img
                   src={avatarPreview}
                   alt="Preview"
-                  className="w-32 h-32 rounded-full object-cover"
+                  className="w-28 h-28 md:w-32 md:h-32 rounded-full object-cover"
                 />
               </div>
             )}
-            <p className="text-sm text-gray-600 mb-4">
-              Press Enter to confirm or Esc to cancel
-            </p>
+            <p className="text-sm text-gray-600 mb-4">Press Enter to confirm or Esc to cancel</p>
             <div className="flex space-x-3">
               <button
                 onClick={handleConfirmUpload}

@@ -11,7 +11,7 @@ interface TaskDetailModalProps {
   onUpdate: (taskId: string, data: Partial<Task>) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   projectMembers: Array<{ id: string; email: string }>;
-  projectTags?: string[];
+  projectTags?: Array<{id: string, name: string, color: string}>;
   canDelete?: boolean;
   canEdit?: boolean;
 }
@@ -28,7 +28,7 @@ export const TaskDetailModal = ({
   canEdit = true
 }: TaskDetailModalProps) => {
   const { user } = useAuthStore();
-  const { registerAndOpenChat, registerChat } = useChat();
+  const { registerAndOpenChat } = useChat();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
@@ -110,10 +110,10 @@ export const TaskDetailModal = ({
   };
 
   const getFilteredSuggestions = () => {
-    if (!tagInput.trim()) return projectTags.filter(t => !tags.includes(t));
+    if (!tagInput.trim()) return projectTags.filter(t => !tags.includes(t.name));
     return projectTags.filter(t => 
-      !tags.includes(t) && 
-      t.toLowerCase().includes(tagInput.toLowerCase())
+      !tags.includes(t.name) && 
+      t.name.toLowerCase().includes(tagInput.toLowerCase())
     );
   };
 
@@ -127,13 +127,21 @@ export const TaskDetailModal = ({
     setError('');
 
     try {
+      // Convert tag names to tag IDs
+      const tagIds = tags.length > 0 
+        ? tags.map(tagName => {
+            const tag = projectTags.find(t => t.name === tagName);
+            return tag?.id;
+          }).filter(Boolean) as string[]
+        : undefined;
+
       await onUpdate(task.id, {
         title: name.trim(),
         description: description.trim() || undefined,
         status,
         priority,
         dueDate: dueDate ? `${dueDate}T00:00:00` : undefined,
-        tags: tags.length > 0 ? tags : undefined,
+        tagIds,
         assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
       });
       setIsEditing(false);
@@ -497,12 +505,12 @@ export const TaskDetailModal = ({
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
                       {getFilteredSuggestions().map((tag) => (
                         <button
-                          key={tag}
+                          key={tag.id}
                           type="button"
-                          onClick={() => handleAddTag(undefined, tag)}
+                          onClick={() => handleAddTag(undefined, tag.name)}
                           className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
                         >
-                          {tag}
+                          {tag.name}
                         </button>
                       ))}
                     </div>

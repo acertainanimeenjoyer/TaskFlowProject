@@ -17,6 +17,9 @@ backend.env
 # Logs
 *.log
 
+# Runtime uploads (created by StorageService)
+uploads/
+
 # Test files
 *.bin
 test_image*.jpg

@@ -41,4 +41,19 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
      * Find team by ID and manager ID (for authorization)
      */
     Optional<Team> findByIdAndManagerId(Long id, Long managerId);
+
+    /**
+     * Check if a user is a member of a team (via join table)
+     */
+    boolean existsByIdAndMembers_Id(Long id, Long userId);
+
+    /**
+     * Check if a user is a leader of a team (via join table)
+     */
+    boolean existsByIdAndLeaders_Id(Long id, Long userId);
+
+    Optional<Team> findByCode(String code);
+
+    @org.springframework.data.jpa.repository.Query("SELECT t FROM Team t LEFT JOIN FETCH t.members LEFT JOIN FETCH t.leaders WHERE t.id = :id")
+    Optional<Team> findByIdWithMembers(Long id);
 }

@@ -8,27 +8,80 @@ export const useWebSocket = () => {
   const [isConnected, setIsConnected] = useState(() => wsService.isConnected());
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      // Ensure we don't keep an authenticated WS session alive after logout.
+      wsService.disconnect();
+      setIsConnected(false);
+      return;
+    }
+
+    let disposed = false;
 
     const connect = async () => {
       try {
-        if (!wsService.isConnected()) {
-          await wsService.connect(token);
+        // Always call connect; service will no-op if already connected with same token,
+        // and will reconnect if token changed.
+        await wsService.connect(token);
+        if (!disposed) {
+          setIsConnected(wsService.isConnected());
         }
-        // Always update state to reflect current connection status
-        setIsConnected(true);
       } catch (err) {
         console.error('WebSocket connection failed:', err);
-        setIsConnected(false);
+        const toastStore = (window as any).__toastStore;
+        if (toastStore) {
+          toastStore.getState().addToast(
+            'Chat connection failed. Please refresh and try again.',
+            'error',
+            5000
+          );
+        }
+        if (!disposed) {
+          setIsConnected(false);
+        }
       }
     };
 
     connect();
 
+    // Keep local state in sync (handles reconnects as well).
+    const interval = window.setInterval(() => {
+      if (!disposed) {
+        setIsConnected(wsService.isConnected());
+      }
+    }, 1000);
+
     return () => {
+      disposed = true;
+      window.clearInterval(interval);
       // Don't disconnect on unmount as other components might be using it
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token || !isConnected) return;
+
+    const destination = '/user/topic/errors';
+    try {
+      const sub = wsService.subscribe(destination, (message) => {
+        console.error('Chat error:', message);
+        const toastStore = (window as any).__toastStore;
+        if (toastStore) {
+          const text = typeof message?.text === 'string' ? message.text : 'Chat error';
+          toastStore.getState().addToast(text, 'error', 5000);
+        }
+      });
+
+      return () => {
+        try {
+          sub?.unsubscribe?.();
+        } catch {
+          // ignore
+        }
+      };
+    } catch {
+      // ignore subscribe errors while reconnecting
+    }
+  }, [token, isConnected]);
 
   const subscribe = useCallback((destination: string, callback: (message: any) => void) => {
     if (wsService.isConnected()) {

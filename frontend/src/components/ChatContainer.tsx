@@ -14,7 +14,8 @@ export const ChatContainer = () => {
         position: 'fixed',
         bottom: '16px',
         right: '16px',
-        zIndex: 99999,
+        // Keep the chat/taskbar above other UI. Use a very large z-index higher than dropdowns.
+        zIndex: 200001,
         display: 'flex',
         alignItems: 'flex-end',
         gap: '12px',

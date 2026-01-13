@@ -205,16 +205,23 @@ export const TaskBoard = () => {
     
     setIsLoading(true);
     try {
-      const [projectData, tasksData] = await Promise.all([
+      const [projectData, tasksData, projectTagsData] = await Promise.all([
         projectService.getProject(projectId),
         taskService.getProjectTasks(projectId),
+        projectService.getTags(projectId),
       ]);
       
-      setProject(projectData);
+      // Set project data with tags (both full objects for modals, and names for display)
+      setProject({ 
+        ...projectData, 
+        tags: projectTagsData.map(t => t.name), // For display
+        tagObjects: projectTagsData // Store full objects for modals
+      });
+      
       // Handle case where backend returns Page object or non-array
-      const tasksArray = Array.isArray(tasksData) 
-        ? tasksData 
-        : (tasksData?.content ?? []);
+      const tasksArray = Array.isArray(tasksData)
+        ? tasksData
+        : ((tasksData as any)?.content ?? []);
       setTasks(tasksArray);
 
       // Build member list from project data (memberIds and memberEmails are parallel arrays)
@@ -430,7 +437,7 @@ export const TaskBoard = () => {
         onSubmit={handleCreateTask}
         initialStatus={createModalStatus}
         projectMembers={projectMembers}
-        projectTags={project?.tags}
+        projectTags={project?.tagObjects}
       />
 
       {selectedTask && (
@@ -441,7 +448,7 @@ export const TaskBoard = () => {
           onUpdate={handleUpdateTask}
           onDelete={handleDeleteTask}
           projectMembers={projectMembers}
-          projectTags={project?.tags}
+          projectTags={project?.tagObjects}
           canDelete={project?.canManageTasks ?? false}
           canEdit={project?.canManageTasks ?? false}
         />

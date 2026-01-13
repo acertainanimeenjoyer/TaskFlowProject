@@ -76,11 +76,11 @@ export const JoinTeamModal = ({ isOpen, onClose, onSubmit }: JoinTeamModalProps)
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Paste team ID here"
+              placeholder="Paste Team ID here"
               autoFocus
             />
             <p className="mt-1 text-xs text-gray-500">
-              Press Enter to join or Esc to cancel
+              If joining by numeric Team ID you must have been invited by email.
             </p>
           </div>
 

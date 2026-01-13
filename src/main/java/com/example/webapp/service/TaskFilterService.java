@@ -1,6 +1,8 @@
 package com.example.webapp.service;
 
+import com.example.webapp.entity.Tag;
 import com.example.webapp.entity.Task;
+import com.example.webapp.entity.User;
 import com.example.webapp.repository.TaskRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -38,6 +41,7 @@ public class TaskFilterService {
      * @param pageable Pagination parameters
      * @return Page of filtered tasks
      */
+    @Transactional(readOnly = true)
     public Page<Task> filterTasks(
             Long projectId,
             String status,
@@ -86,14 +90,18 @@ public class TaskFilterService {
                 predicates.add(cb.equal(root.get("status"), status));
             }
             
-            // Optional: Assignee filter
+            // Optional: Assignee filter - use JOIN to filter by user ID
             if (assigneeId != null) {
-                predicates.add(cb.isMember(assigneeId, root.get("assignees")));
+                jakarta.persistence.criteria.Join<Task, User> assigneeJoin = root.join("assignees");
+                predicates.add(cb.equal(assigneeJoin.get("id"), assigneeId));
+                query.distinct(true); // Avoid duplicates from join
             }
             
-            // Optional: Tag filter
+            // Optional: Tag filter - use JOIN to filter by tag ID
             if (tagId != null) {
-                predicates.add(cb.isMember(tagId, root.get("tags")));
+                jakarta.persistence.criteria.Join<Task, Tag> tagJoin = root.join("tags");
+                predicates.add(cb.equal(tagJoin.get("id"), tagId));
+                query.distinct(true); // Avoid duplicates from join
             }
             
             // Optional: Priority filter

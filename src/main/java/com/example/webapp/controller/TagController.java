@@ -96,6 +96,37 @@ public class TagController {
     }
     
     /**
+     * Delete a tag from a project
+     * DELETE /api/projects/{projectId}/tags/{tagName}
+     */
+    @DeleteMapping("/{projectId}/tags/{tagName}")
+    public ResponseEntity<?> deleteTag(
+            @PathVariable Long projectId,
+            @PathVariable String tagName,
+            Authentication authentication) {
+        
+        try {
+            String userEmail = authentication.getName();
+            log.info("User {} deleting tag '{}' from project {}", userEmail, tagName, projectId);
+            
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+            
+            tagService.deleteTag(projectId, user.getId(), tagName);
+            
+            return ResponseEntity.ok().build();
+            
+        } catch (IllegalArgumentException e) {
+            log.warn("Delete tag failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error deleting tag", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to delete tag");
+        }
+    }
+    
+    /**
      * Map Tag entity to TagResponse DTO
      */
     private TagResponse mapToResponse(Tag tag) {

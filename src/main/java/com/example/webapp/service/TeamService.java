@@ -4,6 +4,9 @@ import com.example.webapp.entity.Team;
 import com.example.webapp.entity.User;
 import com.example.webapp.repository.TeamRepository;
 import com.example.webapp.repository.UserRepository;
+import com.example.webapp.repository.CommentRepository;
+import com.example.webapp.repository.TagRepository;
+import com.example.webapp.repository.TaskRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,14 +27,26 @@ public class TeamService {
     
     @Autowired
     private TeamRepository teamRepository;
+
+    @Autowired
+    private com.example.webapp.repository.ProjectRepository projectRepository;
     
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private TaskRepository taskRepository;
+
+    @Autowired
+    private TagRepository tagRepository;
+
+    @Autowired
+    private CommentRepository commentRepository;
     
     /**
      * Create a new team with the given manager
      */
-    public Team createTeam(Long managerId, String name) {
+    public Team createTeam(Long managerId, String name, int joinMode) {
         log.info("Creating team '{}' with manager ID: {}", name, managerId);
         
         // Verify manager exists
@@ -39,19 +54,29 @@ public class TeamService {
                 .orElseThrow(() -> new IllegalArgumentException("Manager user not found"));
         
         Team team = Team.builder()
-                .name(name)
-                .managerId(managerId)
-                .members(new HashSet<>())
-                .leaders(new HashSet<>())
-                .createdAt(LocalDateTime.now())
-                .build();
+            .name(name)
+            .managerId(managerId)
+            .members(new HashSet<>())
+            .leaders(new HashSet<>())
+            .createdAt(LocalDateTime.now())
+            .joinMode(joinMode)
+            .inviteEmails(new HashSet<>())
+            .build();
         
         // Add manager as first member
         team.getMembers().add(manager);
-        
+
+        // Persist team to obtain its DB id, then use the numeric id as the public join identifier.
         Team savedTeam = teamRepository.save(team);
         log.info("Team created with ID: {}", savedTeam.getId());
-        
+
+        // Use the DB id as the public team code/identifier to avoid separate token fields.
+        String idCode = String.valueOf(savedTeam.getId());
+        if (savedTeam.getCode() == null || !savedTeam.getCode().equals(idCode)) {
+            savedTeam.setCode(idCode);
+            savedTeam = teamRepository.save(savedTeam);
+        }
+
         return savedTeam;
     }
     
@@ -88,38 +113,31 @@ public class TeamService {
      */
     public Team inviteEmail(Long teamId, Long managerId, String inviteEmail) {
         log.info("Manager {} inviting {} to team {}", managerId, inviteEmail, teamId);
-        
+
         // Verify team exists and user is manager
         Team team = teamRepository.findByIdAndManagerId(teamId, managerId)
                 .orElseThrow(() -> new IllegalArgumentException("Team not found or you are not the manager"));
-        
-        // Check if invited user exists
-        User invitedUser = userRepository.findByEmail(inviteEmail)
-                .orElseThrow(() -> new IllegalArgumentException("User with email " + inviteEmail + " not found"));
-        
-        // Check if already a member
-        if (team.getMembers().contains(invitedUser)) {
-            throw new IllegalArgumentException("User is already a member");
+
+        // Always store the invite email and notify later; do NOT auto-add the user.
+        if (team.getInviteEmails() == null) {
+            team.setInviteEmails(new java.util.HashSet<>());
         }
-        
-        // Check team size
-        if (team.getMembers().size() >= MAX_MEMBERS) {
-            throw new IllegalArgumentException("Team has reached maximum member limit of " + MAX_MEMBERS);
+        if (!team.getInviteEmails().contains(inviteEmail)) {
+            team.getInviteEmails().add(inviteEmail);
+            Team saved = teamRepository.save(team);
+            log.info("Stored invite for {} on team {}", inviteEmail, teamId);
+            return saved;
         }
-        
-        // Add user to members directly
-        team.getMembers().add(invitedUser);
-        Team savedTeam = teamRepository.save(team);
-        
-        log.info("User {} added to team {} via email invitation", inviteEmail, teamId);
-        return savedTeam;
+
+        // Already invited; return current state
+        return team;
     }
     
     /**
      * Join a team
      */
     @Transactional
-    public Team joinTeam(Long teamId, Long userId) {
+    public Team joinTeam(Long teamId, Long userId, boolean byCode) {
         log.info("User {} attempting to join team {}", userId, teamId);
         
         // Verify team exists
@@ -130,22 +148,44 @@ public class TeamService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
-        // Check if already a member
+        int mode = team.getJoinMode();
+
+        // If ONLY_EMAIL, joining by code or id is not allowed
+        if (mode == 3) {
+            throw new IllegalArgumentException("This team requires manager to add members; joining is disabled.");
+        }
+
+        // If user already member
         if (team.getMembers().contains(user)) {
             throw new IllegalArgumentException("You are already a member of this team");
         }
-        
-        // Check if team has space
+
+        // Check team size
         if (team.getMembers().size() >= MAX_MEMBERS) {
             throw new IllegalArgumentException("Team has reached maximum member limit of " + MAX_MEMBERS);
         }
-        
+
+        // Joining-by-ID requires a prior email invitation (unless joining by code)
+        if (!byCode) {
+            String email = user.getEmail();
+            // Ensure inviteEmails collection is initialized and check case-insensitively
+            if (email == null
+                    || team.getInviteEmails() == null
+                    || team.getInviteEmails().stream().noneMatch(inv -> inv.equalsIgnoreCase(email))) {
+                throw new IllegalArgumentException("You must be invited by email to join this team by ID");
+            }
+        }
+
         // Add user to members
         team.getMembers().add(user);
-        Team savedTeam = teamRepository.save(team);
-        
-        log.info("User {} successfully joined team {}", userId, teamId);
-        return savedTeam;
+        // If user had a pending invite email, remove it
+        if (user.getEmail() != null && team.getInviteEmails().contains(user.getEmail())) {
+            team.getInviteEmails().remove(user.getEmail());
+        }
+
+        Team saved = teamRepository.save(team);
+        log.info("User {} joined team {} (mode={})", userId, teamId, mode);
+        return saved;
     }
     
     /**
@@ -186,6 +226,14 @@ public class TeamService {
      */
     public Optional<Team> getTeamById(Long teamId) {
         return teamRepository.findById(teamId);
+    }
+
+    public Optional<Team> getTeamWithMembers(Long teamId) {
+        return teamRepository.findByIdWithMembers(teamId);
+    }
+
+    public Optional<Team> findByCode(String code) {
+        return teamRepository.findByCode(code);
     }
     
     /**
@@ -360,5 +408,60 @@ public class TeamService {
      */
     public boolean isOwnerOrLeader(Long teamId, Long userId) {
         return isTeamOwner(teamId, userId) || isTeamLeader(teamId, userId);
+    }
+
+    /**
+     * Delete a team and its related projects. Only the manager/owner can delete the team.
+     */
+    @Transactional
+    public void deleteTeam(Long teamId, Long actingUserId) {
+        log.info("User {} requested deletion of team {}", actingUserId, teamId);
+
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new IllegalArgumentException("Team not found"));
+
+        if (!team.getManagerId().equals(actingUserId)) {
+            throw new IllegalArgumentException("Only the team owner can delete the team");
+        }
+
+        // Remove member/leader associations to clear join tables
+        team.getMembers().clear();
+        team.getLeaders().clear();
+        teamRepository.save(team);
+
+        // Delete projects that belong to this team.
+        // IMPORTANT: delete in dependency-safe order to avoid FK constraint violations.
+        java.util.List<com.example.webapp.entity.Project> projects = projectRepository.findByTeamId(teamId);
+        for (com.example.webapp.entity.Project project : projects) {
+            Long projectId = project.getId();
+
+            // Clear project members (join table)
+            project.getMembers().clear();
+            projectRepository.save(project);
+
+            // Delete task comments first (Task -> Comment has FK, no cascade)
+            java.util.List<com.example.webapp.entity.Task> tasks = taskRepository.findByProjectId(projectId);
+            for (com.example.webapp.entity.Task task : tasks) {
+                commentRepository.deleteByTaskId(task.getId());
+            }
+
+            // Delete tasks (Hibernate will clear task_assignees and task_tags join tables)
+            if (!tasks.isEmpty()) {
+                taskRepository.deleteAll(tasks);
+            }
+
+            // Delete tags for the project
+            java.util.List<com.example.webapp.entity.Tag> tags = tagRepository.findByProjectId(projectId);
+            if (!tags.isEmpty()) {
+                tagRepository.deleteAll(tags);
+            }
+
+            // Delete the project
+            projectRepository.delete(project);
+        }
+
+        // Finally delete the team
+        teamRepository.delete(team);
+        log.info("Team {} and its projects were deleted by user {}", teamId, actingUserId);
     }
 }

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useToastStore } from '../store/toastStore';
@@ -18,6 +19,9 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const [profilePos, setProfilePos] = useState<{ top: number; right: number } | null>(null);
+  const profilePortalRef = useRef<HTMLDivElement | null>(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -35,7 +39,10 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideHost = dropdownRef.current && dropdownRef.current.contains(target);
+      const insidePortal = profilePortalRef.current && profilePortalRef.current.contains(target);
+      if (!insideHost && !insidePortal) {
         setShowProfileDropdown(false);
       }
     };
@@ -44,6 +51,24 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
+  }, [showProfileDropdown]);
+
+  useLayoutEffect(() => {
+    if (!showProfileDropdown) return;
+    const updatePos = () => {
+      const btn = profileButtonRef.current;
+      if (!btn) return setProfilePos(null);
+      const r = btn.getBoundingClientRect();
+      setProfilePos({ top: r.bottom + window.scrollY, right: window.innerWidth - r.right });
+    };
+
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
   }, [showProfileDropdown]);
 
   const handleLogout = () => {
@@ -64,8 +89,14 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
+  // Redirect unauthenticated users without navigating during render
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
+
   if (!user) {
-    navigate('/login');
     return null;
   }
 
@@ -126,7 +157,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col ${isSidebarCollapsed ? 'ml-16' : 'ml-64'} transition-all duration-300`}>
         {/* Top NavBar */}
-        <header className={`h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 fixed top-0 right-0 z-40 transition-all duration-300 ${isSidebarCollapsed ? 'left-16' : 'left-64'}`}>
+        <header className={`h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 fixed top-0 right-0 z-[10000000] transition-all duration-300 ${isSidebarCollapsed ? 'left-16' : 'left-64'}`}>
           {/* Spacer to push items to the right */}
           <div className="flex-1"></div>
 
@@ -138,6 +169,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
             {/* Profile Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
+                ref={profileButtonRef}
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                 className="flex items-center space-x-2 hover:bg-gray-50 rounded-lg px-2 py-1"
               >
@@ -148,15 +180,15 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
                 <span className="text-gray-400">▼</span>
               </button>
 
-              {showProfileDropdown && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2">
+              {showProfileDropdown && profilePos && createPortal(
+                <div ref={profilePortalRef} style={{ position: 'absolute', top: profilePos.top + 'px', right: profilePos.right + 'px' }} className="w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-[100000]">
                   {/* Profile Header */}
                   <div className="px-4 py-3 border-b border-gray-200">
                     <div className="flex items-center space-x-3">
                       <Avatar email={user.email} size="medium" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{user.email || 'User'}</p>
-                        <p className="text-xs text-gray-500">ID: {user.id ? user.id.slice(0, 8) : 'N/A'}...</p>
+                        <p className="text-xs text-gray-500">ID: {user.id ? String(user.id).slice(0, 8) : 'N/A'}...</p>
                       </div>
                     </div>
                   </div>
@@ -191,7 +223,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
                       Logout
                     </button>
                   </div>
-                </div>
+                </div>, document.body
               )}
             </div>
           </div>

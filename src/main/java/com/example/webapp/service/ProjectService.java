@@ -37,6 +37,12 @@ public class ProjectService {
     @Autowired
     private NotificationService notificationService;
     
+    @Autowired
+    private com.example.webapp.repository.TaskRepository taskRepository;
+
+    @Autowired
+    private com.example.webapp.repository.TagRepository tagRepository;
+    
     /**
      * Create a new project with the given owner ID
      */
@@ -207,41 +213,44 @@ public class ProjectService {
      * - Project owner or direct member
      * - Team owner or leader (for team projects)
      * Regular team members cannot see projects unless they're added as project members
+     *
+     * Uses repository queries to avoid lazy-loading collections outside a session.
      */
     public boolean hasAccess(Long projectId, Long userId) {
-        Optional<Project> project = projectRepository.findById(projectId);
-        if (project.isEmpty()) {
+        Optional<Project> projectOpt = projectRepository.findById(projectId);
+        if (projectOpt.isEmpty()) {
             return false;
         }
-        
-        Project p = project.get();
-        
+
+        Project p = projectOpt.get();
+
         // Check if user is project owner
         if (p.getOwnerId().equals(userId)) {
             return true;
         }
-        
-        // Check if user is direct member
-        if (p.getMembers().stream().anyMatch(m -> m.getId().equals(userId))) {
+
+        // Check if user is direct member (via join-table query)
+        if (projectRepository.existsByIdAndMembers_Id(projectId, userId)) {
             return true;
         }
-        
+
         // Check if project belongs to a team and user is team owner or leader
-        if (p.getTeamId() != null) {
-            Optional<Team> team = teamRepository.findById(p.getTeamId());
-            if (team.isPresent()) {
-                Team t = team.get();
+        Long teamId = p.getTeamId();
+        if (teamId != null) {
+            Optional<Team> teamOpt = teamRepository.findById(teamId);
+            if (teamOpt.isPresent()) {
+                Team t = teamOpt.get();
                 // Check if user is team owner
                 if (t.getManagerId().equals(userId)) {
                     return true;
                 }
-                // Check if user is team leader
-                if (t.getLeaders().stream().anyMatch(l -> l.getId().equals(userId))) {
+                // Check if user is team leader (via join-table query)
+                if (teamRepository.existsByIdAndLeaders_Id(teamId, userId)) {
                     return true;
                 }
             }
         }
-        
+
         return false;
     }
     
@@ -259,6 +268,41 @@ public class ProjectService {
     public List<Project> getProjectsByTeamId(Long teamId) {
         log.info("Fetching projects for team: {}", teamId);
         return projectRepository.findByTeamId(teamId);
+    }
+
+    /**
+     * Delete a project and its related tasks and tags. Only project owner can delete.
+     */
+    @Transactional
+    public void deleteProject(Long projectId, Long actingUserId) {
+        log.info("User {} requested deletion of project {}", actingUserId, projectId);
+
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
+        if (!project.getOwnerId().equals(actingUserId)) {
+            throw new IllegalArgumentException("Only the project owner can delete the project");
+        }
+
+        // Clear member associations (join table)
+        project.getMembers().clear();
+        projectRepository.save(project);
+
+        // Delete task-related data
+        java.util.List<com.example.webapp.entity.Task> tasks = taskRepository.findByProjectId(projectId);
+        if (!tasks.isEmpty()) {
+            taskRepository.deleteAll(tasks);
+        }
+
+        // Delete tags belonging to this project
+        java.util.List<com.example.webapp.entity.Tag> tags = tagRepository.findByProjectId(projectId);
+        if (!tags.isEmpty()) {
+            tagRepository.deleteAll(tags);
+        }
+
+        // Finally delete project
+        projectRepository.delete(project);
+        log.info("Project {} deleted by user {}", projectId, actingUserId);
     }
     
     /**

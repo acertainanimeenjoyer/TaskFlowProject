@@ -5,10 +5,13 @@ export interface Team {
   id: string;
   name: string;
   managerEmail: string;
+  memberEmails?: string[];
   memberIds: string[];
   leaderIds: string[];
   inviteEmails: string[];
   createdAt: string;
+  code?: string;
+  joinMode?: number;
 }
 
 export const teamService = {
@@ -38,11 +41,12 @@ export const teamService = {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        const message = error.response?.data;
-        if (typeof message === 'string') {
-          if (message.includes('not invited')) {
-            throw new Error('You need an invitation to join this team. Ask the team manager to invite you.');
-          }
+          const message = error.response?.data;
+          if (typeof message === 'string') {
+            const lower = message.toLowerCase();
+            if (lower.includes('not invited') || lower.includes('must be invited') || lower.includes('invited by email') || lower.includes('you must be invited')) {
+              throw new Error('You need an invitation to join this team. Ask the team manager to invite you.');
+            }
           if (message.includes('already a member')) {
             throw new Error('You are already a member of this team.');
           }
@@ -76,5 +80,9 @@ export const teamService = {
   kickMember: async (teamId: string, userId: string): Promise<Team> => {
     const response = await api.post(`/teams/${teamId}/kick/${userId}`);
     return response.data;
+  },
+
+  deleteTeam: async (teamId: string): Promise<void> => {
+    await api.delete(`/teams/${teamId}`);
   },
 };

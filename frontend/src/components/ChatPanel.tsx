@@ -23,32 +23,55 @@ export const ChatPanel = ({ channelId, channelType, isCollapsed, onToggle }: Cha
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { isConnected, sendMessage, subscribe, unsubscribe } = useWebSocket();
+  const { isConnected, sendMessage, subscribe } = useWebSocket();
+
+  const mergeMessages = (existing: ChatMessage[], incoming: ChatMessage[]) => {
+    const all = [...existing, ...incoming];
+    const seen = new Set<string>();
+    const deduped: ChatMessage[] = [];
+    for (const m of all) {
+      const key = m.id || `${m.createdAt || ''}|${m.senderEmail || ''}|${m.senderId || ''}|${m.text || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(m);
+    }
+    deduped.sort((a, b) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return at - bt;
+    });
+    return deduped;
+  };
 
   useEffect(() => {
     if (channelId && isConnected) {
       // Subscribe to channel - matches backend: /topic/chat/{channelType}/{channelId}
       const destination = `/topic/chat/${channelType}/${channelId}`;
 
-      subscribe(destination, (message) => {
+      const sub = subscribe(destination, (message) => {
         // Map backend response to ChatMessage format
         const newMessage: ChatMessage = {
           id: message.id || Date.now().toString(),
           channelType: message.channelType || channelType,
           channelId: message.channelId || channelId,
           senderId: message.senderId,
+          senderEmail: message.senderEmail,
           senderName: message.senderName,
           text: message.text,
           createdAt: message.createdAt || new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev) => mergeMessages(prev, [newMessage]));
       });
 
       // Load initial history
       loadHistory();
 
       return () => {
-        unsubscribe(destination);
+        try {
+          sub?.unsubscribe?.();
+        } catch {
+          // ignore
+        }
       };
     }
   }, [channelId, channelType, isConnected]);
@@ -91,7 +114,7 @@ export const ChatPanel = ({ channelId, channelType, isCollapsed, onToggle }: Cha
       }
 
       // History is already in ChatMessage format from chat.service.ts
-      setMessages(history);
+      setMessages((prev) => mergeMessages(prev, history));
     } catch (err) {
       console.error('Failed to load chat history:', err);
       setError('Failed to load chat history');
@@ -172,6 +195,11 @@ export const ChatPanel = ({ channelId, channelType, isCollapsed, onToggle }: Cha
         className="flex-1 p-3 space-y-3 bg-gray-50 min-h-0 chat-scrollbar"
         style={{ overflowY: 'auto' }}
       >
+        {error && (
+          <div className="mb-2 rounded-md bg-red-50 p-2">
+            <p className="text-xs text-red-800">{error}</p>
+          </div>
+        )}
         {isLoadingHistory && (
           <div className="text-center text-sm text-gray-400 py-4">
             <svg className="animate-spin h-5 w-5 mx-auto mb-2 text-blue-500" fill="none" viewBox="0 0 24 24">
@@ -192,7 +220,12 @@ export const ChatPanel = ({ channelId, channelType, isCollapsed, onToggle }: Cha
         )}
 
         {messages.map((message) => {
-          const isOwnMessage = message.senderId === user?.email;
+          const isOwnMessage =
+            (!!message.senderEmail && message.senderEmail === user?.email) ||
+            (String(message.senderId ?? '') !== '' && String(message.senderId) === String(user?.id ?? ''));
+
+          const senderLabel =
+            message.senderEmail || message.senderName || message.senderId || 'Unknown';
           return (
             <div
               key={message.id}
@@ -207,7 +240,7 @@ export const ChatPanel = ({ channelId, channelType, isCollapsed, onToggle }: Cha
               >
                 {!isOwnMessage && (
                   <p className="text-xs font-medium text-blue-600 mb-1">
-                    {message.senderName || message.senderId}
+                    {senderLabel}
                   </p>
                 )}
                 <p className="text-sm whitespace-pre-wrap break-words">

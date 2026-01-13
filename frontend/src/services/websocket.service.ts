@@ -1,14 +1,39 @@
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
-// Use environment variable for production, fallback to localhost for development
-const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws/chat';
+function deriveWsUrl(): string {
+  const explicit = import.meta.env.VITE_WS_URL as string | undefined;
+  if (explicit) return explicit;
+
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (apiUrl) {
+    try {
+      const url = new URL(apiUrl);
+      // If API base ends in /api or /api/, strip it.
+      url.pathname = url.pathname.replace(/\/?api\/?$/, '');
+      // Ensure exactly one slash.
+      const basePath = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
+      url.pathname = `${basePath}/ws/chat`;
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      // Fall through to default
+    }
+  }
+
+  return 'http://localhost:8080/ws/chat';
+}
+
+// Use VITE_WS_URL if set; otherwise derive from VITE_API_URL; fallback to localhost.
+const WS_URL = deriveWsUrl();
 
 export interface ChatMessage {
   id?: string;
   channelType: 'team' | 'task';
   channelId: string;
   senderId: string;
+  senderEmail?: string;
   senderName: string;
   text: string;
   createdAt?: string;
@@ -16,14 +41,61 @@ export interface ChatMessage {
 
 export class WebSocketService {
   private client: Client | null = null;
-  private subscriptions: Map<string, any> = new Map();
+  private subscriptions: Map<
+    string,
+    {
+      subscription: any;
+      callbacks: Set<(message: any) => void>;
+    }
+  > = new Map();
+  private connectPromise: Promise<void> | null = null;
+  private activeToken: string | null = null;
+  private connectingToken: string | null = null;
 
-  connect(token: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.client?.connected) {
-        resolve();
-        return;
+  private async disconnectAsync(): Promise<void> {
+    this.subscriptions.forEach((entry) => entry.subscription.unsubscribe());
+    this.subscriptions.clear();
+
+    const client = this.client;
+    this.client = null;
+    this.connectPromise = null;
+    this.activeToken = null;
+    this.connectingToken = null;
+
+    if (!client) return;
+    try {
+      await client.deactivate();
+    } catch {
+      // ignore
+    }
+  }
+
+  async connect(token: string): Promise<void> {
+    // If already connected with the same token, nothing to do.
+    if (this.client?.connected && this.activeToken === token) {
+      return;
+    }
+
+    // If connected with a different token, force a reconnect so the server principal matches.
+    if (this.client?.connected && this.activeToken && this.activeToken !== token) {
+      await this.disconnectAsync();
+    }
+
+    // Prevent multiple components from racing to create/overwrite the STOMP client.
+    if (this.connectPromise) {
+      // If an in-flight connection is using the same token, await it.
+      if (this.connectingToken === token) {
+        return this.connectPromise;
       }
+
+      // Token changed mid-flight; cancel and reconnect.
+      await this.disconnectAsync();
+    }
+
+    this.connectingToken = token;
+
+    const promise: Promise<void> = new Promise<void>((resolve, reject) => {
+      let settled = false;
 
       this.client = new Client({
         webSocketFactory: () => new SockJS(WS_URL),
@@ -33,25 +105,70 @@ export class WebSocketService {
         reconnectDelay: 5000,
         heartbeatIncoming: 4000,
         heartbeatOutgoing: 4000,
+        connectionTimeout: 10000,
         onConnect: () => {
           console.log('WebSocket connected');
+          settled = true;
+          this.connectPromise = null;
+          this.activeToken = token;
+          this.connectingToken = null;
           resolve();
         },
         onStompError: (frame) => {
           console.error('WebSocket error:', frame);
-          reject(new Error(frame.headers['message']));
+          if (!settled) {
+            settled = true;
+            this.connectPromise = null;
+            this.activeToken = null;
+            this.connectingToken = null;
+            reject(new Error(frame.headers['message'] || 'STOMP error'));
+          }
+        },
+        onWebSocketError: (evt) => {
+          console.error('WebSocket transport error:', evt);
+          if (!settled) {
+            settled = true;
+            this.connectPromise = null;
+            this.activeToken = null;
+            this.connectingToken = null;
+            reject(new Error('WebSocket transport error'));
+          }
+        },
+        onWebSocketClose: (evt) => {
+          console.warn('WebSocket transport closed:', evt);
+          if (!settled) {
+            settled = true;
+            this.connectPromise = null;
+            this.activeToken = null;
+            this.connectingToken = null;
+            reject(new Error('WebSocket connection closed before STOMP CONNECT'));
+          }
+        },
+        onDisconnect: () => {
+          console.warn('WebSocket disconnected');
+          this.activeToken = null;
         },
       });
 
       this.client.activate();
+    }).catch((err) => {
+      // Ensure we don't keep a broken client around after a failed connect attempt.
+      try {
+        this.client?.deactivate();
+      } catch {
+        // ignore
+      }
+      this.client = null;
+      this.subscriptions.clear();
+      throw err;
     });
+
+    this.connectPromise = promise;
+    await promise;
   }
 
   disconnect(): void {
-    this.subscriptions.forEach((sub) => sub.unsubscribe());
-    this.subscriptions.clear();
-    this.client?.deactivate();
-    this.client = null;
+    void this.disconnectAsync();
   }
 
   subscribe(destination: string, callback: (message: any) => void): any {
@@ -59,26 +176,64 @@ export class WebSocketService {
       throw new Error('WebSocket not connected');
     }
 
-    // Unsubscribe if already subscribed
-    if (this.subscriptions.has(destination)) {
-      this.subscriptions.get(destination).unsubscribe();
+    const existing = this.subscriptions.get(destination);
+    if (existing) {
+      existing.callbacks.add(callback);
+      return {
+        unsubscribe: () => {
+          const entry = this.subscriptions.get(destination);
+          if (!entry) return;
+          entry.callbacks.delete(callback);
+          if (entry.callbacks.size === 0) {
+            entry.subscription.unsubscribe();
+            this.subscriptions.delete(destination);
+          }
+        },
+      };
     }
 
+    const callbacks = new Set<(message: any) => void>();
+    callbacks.add(callback);
+
     const subscription = this.client.subscribe(destination, (message) => {
-      const parsedMessage = JSON.parse(message.body);
-      callback(parsedMessage);
+      let parsedMessage: any;
+      try {
+        parsedMessage = JSON.parse(message.body);
+      } catch {
+        parsedMessage = message.body;
+      }
+
+      const entry = this.subscriptions.get(destination);
+      if (!entry) return;
+      entry.callbacks.forEach((cb) => {
+        try {
+          cb(parsedMessage);
+        } catch (err) {
+          console.error('WebSocket subscriber callback error:', err);
+        }
+      });
     });
 
-    this.subscriptions.set(destination, subscription);
-    return subscription;
+    this.subscriptions.set(destination, { subscription, callbacks });
+
+    return {
+      unsubscribe: () => {
+        const entry = this.subscriptions.get(destination);
+        if (!entry) return;
+        entry.callbacks.delete(callback);
+        if (entry.callbacks.size === 0) {
+          entry.subscription.unsubscribe();
+          this.subscriptions.delete(destination);
+        }
+      },
+    };
   }
 
   unsubscribe(destination: string): void {
-    const subscription = this.subscriptions.get(destination);
-    if (subscription) {
-      subscription.unsubscribe();
-      this.subscriptions.delete(destination);
-    }
+    const entry = this.subscriptions.get(destination);
+    if (!entry) return;
+    entry.subscription.unsubscribe();
+    this.subscriptions.delete(destination);
   }
 
   sendMessage(destination: string, body: any): void {
