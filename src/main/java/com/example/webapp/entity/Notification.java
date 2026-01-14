@@ -45,6 +45,9 @@ public class Notification {
     @Column(name = "reference_type")
     private String referenceType;
     
+    @Column(name = "secondary_reference_id")
+    private Long secondaryReferenceId;
+    
     @Column(name = "read_flag", nullable = false)
     private Boolean read;
     

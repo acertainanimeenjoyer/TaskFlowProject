@@ -7,6 +7,7 @@ export interface Notification {
   message: string;
   referenceId: string;
   referenceType: string;
+  secondaryReferenceId?: string;
   read: boolean;
   createdAt: string;
 }

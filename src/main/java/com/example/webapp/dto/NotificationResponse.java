@@ -18,6 +18,7 @@ public class NotificationResponse {
     private String message;
     private Long referenceId;
     private String referenceType;
+    private Long secondaryReferenceId;
     private boolean read;
     private LocalDateTime createdAt;
 }

@@ -90,6 +90,14 @@ public class NotificationService {
      */
     private Notification createNotification(Long userId, String type, String title, String message, 
                                             Long referenceId, String referenceType) {
+        return createNotification(userId, type, title, message, referenceId, referenceType, null);
+    }
+
+    /**
+     * Create a notification with secondary reference (e.g., projectId for task notifications)
+     */
+    private Notification createNotification(Long userId, String type, String title, String message, 
+                                            Long referenceId, String referenceType, Long secondaryReferenceId) {
         Notification notification = Notification.builder()
                 .userId(userId)
                 .type(type)
@@ -97,6 +105,7 @@ public class NotificationService {
                 .message(message)
                 .referenceId(referenceId)
                 .referenceType(referenceType)
+                .secondaryReferenceId(secondaryReferenceId)
                 .read(false)
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -212,7 +221,7 @@ public class NotificationService {
             for (Long leaderId : leaders) {
                 if (!leaderId.equals(creatorId) && notifiedUsers.add(leaderId)) {
                     createNotification(leaderId, "TASK_CREATED", title, message,
-                                      task.getId(), "task");
+                                      task.getId(), "task", project.getId());
                 }
             }
         }
@@ -225,7 +234,7 @@ public class NotificationService {
                     createNotification(assigneeId, "TASK_ASSIGNED",
                                       "Task Assigned to You",
                                       "You have been assigned to task '" + task.getTitle() + "'",
-                                      task.getId(), "task");
+                                      task.getId(), "task", project.getId());
                 }
             }
         }
@@ -249,7 +258,7 @@ public class NotificationService {
             for (Long leaderId : leaders) {
                 if (!leaderId.equals(changedByUserId) && notifiedUsers.add(leaderId)) {
                     createNotification(leaderId, "TASK_STATUS_CHANGED", title, message,
-                                      task.getId(), "task");
+                                      task.getId(), "task", project.getId());
                 }
             }
         }
@@ -260,7 +269,7 @@ public class NotificationService {
                 Long assigneeId = assignee.getId();
                 if (!assigneeId.equals(changedByUserId) && notifiedUsers.add(assigneeId)) {
                     createNotification(assigneeId, "TASK_STATUS_CHANGED", title, message,
-                                      task.getId(), "task");
+                                      task.getId(), "task", project.getId());
                 }
             }
         }
@@ -269,7 +278,7 @@ public class NotificationService {
     /**
      * Notify when user is assigned to a task
      */
-    public void notifyTaskAssigned(Task task, Set<User> newAssignees, Long assignedByUserId) {
+    public void notifyTaskAssigned(Task task, Project project, Set<User> newAssignees, Long assignedByUserId) {
         log.info("Creating notifications for task assignment: {}", task.getTitle());
         
         for (User assignee : newAssignees) {
@@ -278,7 +287,7 @@ public class NotificationService {
                 createNotification(assigneeId, "TASK_ASSIGNED",
                                   "Task Assigned to You",
                                   "You have been assigned to task '" + task.getTitle() + "'",
-                                  task.getId(), "task");
+                                  task.getId(), "task", project.getId());
             }
         }
     }
@@ -286,13 +295,13 @@ public class NotificationService {
     /**
      * Notify when task due date is approaching (can be called by a scheduled job)
      */
-    public void notifyTaskDueSoon(Task task) {
+    public void notifyTaskDueSoon(Task task, Long projectId) {
         if (task.getAssignees() != null) {
             for (User assignee : task.getAssignees()) {
                 createNotification(assignee.getId(), "TASK_DUE_SOON",
                                   "Task Due Soon",
                                   "Task '" + task.getTitle() + "' is due soon",
-                                  task.getId(), "task");
+                                  task.getId(), "task", projectId);
             }
         }
     }

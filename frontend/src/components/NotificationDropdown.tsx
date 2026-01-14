@@ -102,8 +102,10 @@ export const NotificationDropdown = () => {
     if (notification.referenceType === 'project') {
       navigate(`/projects/${notification.referenceId}`);
     } else if (notification.referenceType === 'task') {
-      // For tasks, we'd need to know the project ID
-      // For now, just close the dropdown
+      // For tasks, use secondaryReferenceId (projectId) to navigate to the task board
+      if (notification.secondaryReferenceId) {
+        navigate(`/projects/${notification.secondaryReferenceId}/board`);
+      }
     } else if (notification.referenceType === 'team') {
       navigate(`/teams/${notification.referenceId}`);
     }
