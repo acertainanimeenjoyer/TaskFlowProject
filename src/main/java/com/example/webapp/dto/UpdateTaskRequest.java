@@ -1,5 +1,7 @@
 package com.example.webapp.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -15,9 +17,10 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UpdateTaskRequest {
     
-    @Size(min = 3, max = 200, message = "Title must be between 3 and 200 characters")
+    @Size(min = 1, max = 200, message = "Title must be between 1 and 200 characters")
     private String title;
     
     @Size(max = 2000, message = "Description must not exceed 2000 characters")
@@ -29,6 +32,7 @@ public class UpdateTaskRequest {
     @Pattern(regexp = "LOW|MEDIUM|HIGH|URGENT", message = "Priority must be LOW, MEDIUM, HIGH, or URGENT")
     private String priority;
     
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime dueDate;
     
     private List<String> assigneeIds;
